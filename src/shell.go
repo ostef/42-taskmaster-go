@@ -1,13 +1,17 @@
 package main
 
 import (
+	"bufio"
 	"fmt"
 	"os"
-	"bufio"
 	"strings"
 )
 
-func shellLoop() {
+type Shell struct {
+	supervisor *Supervisor
+}
+
+func (s *Shell) Loop() {
 	reader := bufio.NewReader(os.Stdin)
 
 	for {
@@ -39,7 +43,7 @@ func shellLoop() {
 			}
 
 			name := args[0]
-			fmt.Printf("Starting '%v'\n", name)
+			s.supervisor.StartTask(name)
 
 		case "stop":
 			if len(args) != 1 {
@@ -48,7 +52,7 @@ func shellLoop() {
 			}
 
 			name := args[0]
-			fmt.Printf("Stopping '%v'\n", name)
+			s.supervisor.StopTask(name)
 
 		case "restart":
 			if len(args) != 1 {
@@ -57,7 +61,7 @@ func shellLoop() {
 			}
 
 			name := args[0]
-			fmt.Printf("Restarting '%v'\n", name)
+			s.supervisor.RestartTask(name)
 
 		case "status":
 			if len(args) != 0 {
@@ -65,7 +69,7 @@ func shellLoop() {
 				continue
 			}
 
-			fmt.Println("Status:")
+			s.supervisor.PrintStatus()
 
 		case "exit":
 			if len(args) != 0 {
