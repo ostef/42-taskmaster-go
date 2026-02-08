@@ -73,6 +73,7 @@ func runProcess(ctx context.Context, command string, args ...string) error {
 
 func main() {
 	ctx, cancel := context.WithCancel(context.Background())
+	_ = ctx
 	defer cancel()
 
 	// sigCh := make(chan os.Signal, 1)
@@ -84,14 +85,15 @@ func main() {
 	// 	cancel()
 	// }()
 
-	for {
-		err := runProcess(ctx, "sleep", "3")
+	shellLoop()
+	// for {
+	// 	err := runProcess(ctx, "sleep", "3")
 
-		if err != nil {
-			return
-		}
+	// 	if err != nil {
+	// 		return
+	// 	}
 
-		fmt.Println("Restarting in 1 second...")
-		time.Sleep(1 * time.Second)
-	}
+	// 	fmt.Println("Restarting in 1 second...")
+	// 	time.Sleep(1 * time.Second)
+	// }
 }
