@@ -43,7 +43,11 @@ func (s *Shell) Loop() {
 			}
 
 			name := args[0]
-			s.supervisor.StartTask(name)
+			err := s.supervisor.StartTask(name)
+
+			if err != nil {
+				fmt.Println("Error:", err)
+			}
 
 		case "stop":
 			if len(args) != 1 {
@@ -52,7 +56,11 @@ func (s *Shell) Loop() {
 			}
 
 			name := args[0]
-			s.supervisor.StopTask(name)
+			err := s.supervisor.StopTask(name)
+
+			if err != nil {
+				fmt.Println("Error:", err)
+			}
 
 		case "restart":
 			if len(args) != 1 {
@@ -61,7 +69,11 @@ func (s *Shell) Loop() {
 			}
 
 			name := args[0]
-			s.supervisor.RestartTask(name)
+			err := s.supervisor.RestartTask(name)
+
+			if err != nil {
+				fmt.Println("Error:", err)
+			}
 
 		case "status":
 			if len(args) != 0 {

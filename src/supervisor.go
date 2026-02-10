@@ -57,13 +57,20 @@ const (
 	ProcessStatusKilled   = iota
 )
 
+type ProcessCommand uint
+
+const (
+	ProcessCommandStop    = iota
+	ProcessCommandRestart = iota
+)
+
 type TaskProcess struct {
-	status      ProcessStatus
-	cmd         *exec.Cmd
-	stopRequest chan bool
+	status       ProcessStatus
+	cmd          *exec.Cmd
+	commandQueue chan ProcessCommand
 }
 
-type RunningTask struct {
+type Task struct {
 	name      string
 	processes []*TaskProcess
 }
@@ -76,8 +83,8 @@ type MyTaskConfig struct {
 }
 
 type Supervisor struct {
-	runningTasks []*RunningTask
-	myConfig     []MyTaskConfig
+	tasks    []*Task
+	myConfig []MyTaskConfig
 }
 
 func (s *Supervisor) getTaskConfig(name string) *MyTaskConfig {
@@ -89,13 +96,13 @@ func (s *Supervisor) getTaskConfig(name string) *MyTaskConfig {
 	return &s.myConfig[idx]
 }
 
-func (s *Supervisor) getRunningTask(name string) *RunningTask {
-	idx := slices.IndexFunc(s.runningTasks, func(t *RunningTask) bool { return t.name == name })
+func (s *Supervisor) getTask(name string) *Task {
+	idx := slices.IndexFunc(s.tasks, func(t *Task) bool { return t.name == name })
 	if idx < 0 {
 		return nil
 	}
 
-	return s.runningTasks[idx]
+	return s.tasks[idx]
 }
 
 func (s *Supervisor) StartTask(name string) error {
@@ -104,21 +111,26 @@ func (s *Supervisor) StartTask(name string) error {
 		return fmt.Errorf("Unknown task '%v'", name)
 	}
 
-	running := s.getRunningTask(name)
-	if running != nil {
-		return fmt.Errorf("Task '%v' is already running", name)
+	task := s.getTask(name)
+	if task == nil {
+		task = new(Task)
+		s.tasks = append(s.tasks, task)
+
+		task.name = name
 	}
 
-	running = new(RunningTask)
-	s.runningTasks = append(s.runningTasks, running)
-
-	running.name = name
+	for _, process := range task.processes {
+		status := process.status.Get()
+		if status != ProcessStatusStopped && status != ProcessStatusKilled {
+			return fmt.Errorf("Task '%v' still has some running processes", name)
+		}
+	}
 
 	for range config.numProcesses {
 		process := new(TaskProcess)
-		running.processes = append(running.processes, process)
+		task.processes = append(task.processes, process)
 
-		process.stopRequest = make(chan bool, 1)
+		process.commandQueue = make(chan ProcessCommand, 3)
 
 		go process.Run(*config)
 	}
@@ -127,57 +139,76 @@ func (s *Supervisor) StartTask(name string) error {
 }
 
 func (s *Supervisor) StopTask(name string) error {
-	running := s.getRunningTask(name)
-	if running == nil {
-		return fmt.Errorf("Task '%v' is not running", name)
+	task := s.getTask(name)
+	if task == nil {
+		return fmt.Errorf("No task '%v'", name)
 	}
 
-	for _, process := range running.processes {
-		process.stopRequest <- true
+	for _, process := range task.processes {
+		process.commandQueue <- ProcessCommandStop
 	}
 
 	return nil
 }
 
 func (s *Supervisor) RestartTask(name string) error {
+	task := s.getTask(name)
+	if task == nil {
+		return s.StartTask(name)
+	}
+
+	for _, process := range task.processes {
+		process.commandQueue <- ProcessCommandRestart
+	}
+
 	return nil
 }
 
 func (s *Supervisor) StopAllTasks() error {
+	for _, task := range s.tasks {
+		for _, process := range task.processes {
+			process.commandQueue <- ProcessCommandStop
+		}
+	}
+
 	return nil
 }
 
 func (s *Supervisor) PrintStatus() {
-	if len(s.runningTasks) == 0 {
-		fmt.Println("No running tasks")
+	if len(s.tasks) == 0 {
+		fmt.Println("No tasks")
 		return
 	}
 
-	fmt.Println("Status:")
-	for _, task := range s.runningTasks {
+	for _, task := range s.tasks {
 		fmt.Printf("Task '%v':\n", task.name)
-		fmt.Printf("Processes (%d):\n", len(task.processes))
-		for i, process := range task.processes {
-			fmt.Printf("  %d: %v\n", i, process.status.String())
+
+		if len(task.processes) == 0 {
+			fmt.Println("No process")
+		} else {
+			fmt.Printf("Processes (%d):\n", len(task.processes))
+			for i, process := range task.processes {
+				fmt.Printf("  %d: %v\n", i, process.status.String())
+			}
 		}
 	}
 }
 
-func (p *TaskProcess) SendTermSignal(doneCh chan error) error {
-	fmt.Println("Shutting down process...")
+func (p *TaskProcess) SendTermSignal(done chan error) error {
+	// fmt.Println("Shutting down process...")
 	_ = p.cmd.Process.Signal(syscall.SIGTERM)
 
 	select {
-	case err := <-doneCh:
-		fmt.Println("Process exited gracefully:", err)
+	case err := <-done:
+		// fmt.Println("Process exited gracefully:", err)
 		p.status.Set(ProcessStatusStopped)
 		return err
 
 	case <-time.After(2 * time.Second):
-		fmt.Println("Process still exiting, sending SIGKILL...")
+		// fmt.Println("Process still exiting, sending SIGKILL...")
 		_ = p.cmd.Process.Kill()
-		err := <-doneCh
-		fmt.Println("Process killed:", err)
+		err := <-done
+		// fmt.Println("Process killed:", err)
 		p.status.Set(ProcessStatusKilled)
 
 		return err
@@ -185,44 +216,61 @@ func (p *TaskProcess) SendTermSignal(doneCh chan error) error {
 }
 
 func (p *TaskProcess) Run(config MyTaskConfig) error {
-	p.cmd = exec.CommandContext(context.Background(), config.command, config.args...)
+	for true {
+		p.cmd = exec.CommandContext(context.Background(), config.command, config.args...)
 
-	p.cmd.Stdout = os.Stdout
-	p.cmd.Stderr = os.Stderr
+		p.cmd.Stdout = os.Stdout
+		p.cmd.Stderr = os.Stderr
 
-	fmt.Println("Starting process for", config.name)
+		// fmt.Println("Starting process for", config.name)
 
-	p.cmd.Start()
+		p.status.Set(ProcessStatusStarted)
+		p.cmd.Start()
 
-	doneCh := make(chan error, 1)
+		done := make(chan error, 1)
 
-	go func() {
-		doneCh <- p.cmd.Wait()
-	}()
+		go func() {
+			done <- p.cmd.Wait()
+		}()
 
-	// Process startup
-	select {
-	case <-p.stopRequest:
-		return p.SendTermSignal(doneCh)
+		// Process startup
+		select {
+		case request := <-p.commandQueue:
+			switch request {
+			case ProcessCommandStop:
+				return p.SendTermSignal(done)
 
-	case err := <-doneCh:
-		p.status.Set(ProcessStatusStopped)
-		fmt.Println("Process exited early:", err)
-		return err
+			case ProcessCommandRestart:
+				p.SendTermSignal(done)
+			}
 
-	case <-time.After(2 * time.Second):
-		p.status.Set(ProcessStatusRunning)
-		fmt.Println("Process has sucessfully started")
+		case err := <-done:
+			p.status.Set(ProcessStatusStopped)
+			// fmt.Println("Process exited early:", err)
+			return err
+
+		case <-time.After(2 * time.Second):
+			p.status.Set(ProcessStatusRunning)
+			// fmt.Println("Process has sucessfully started")
+		}
+
+		// Process is running
+		select {
+		case request := <-p.commandQueue:
+			switch request {
+			case ProcessCommandStop:
+				return p.SendTermSignal(done)
+
+			case ProcessCommandRestart:
+				p.SendTermSignal(done)
+			}
+
+		case err := <-done:
+			p.status.Set(ProcessStatusStopped)
+			// fmt.Println("Process exited:", err)
+			return err
+		}
 	}
 
-	// Process is running
-	select {
-	case <-p.stopRequest:
-		return p.SendTermSignal(doneCh)
-
-	case err := <-doneCh:
-		p.status.Set(ProcessStatusStopped)
-		fmt.Println("Process exited:", err)
-		return err
-	}
+	return nil
 }
