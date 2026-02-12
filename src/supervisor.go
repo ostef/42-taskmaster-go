@@ -86,9 +86,9 @@ type MyTaskConfig struct {
 }
 
 type Supervisor struct {
-	tasks    []*Task
-	myConfig []MyTaskConfig
-	ctx      context.Context
+	waitGroup sync.WaitGroup
+	tasks     []*Task
+	myConfig  []MyTaskConfig
 }
 
 func (s *Supervisor) getTaskConfig(name string) *MyTaskConfig {
@@ -107,10 +107,6 @@ func (s *Supervisor) getTask(name string) *Task {
 	}
 
 	return s.tasks[idx]
-}
-
-func (s *Supervisor) Init() {
-	s.ctx = context.Background()
 }
 
 func (s *Supervisor) StartTask(name string) error {
@@ -145,7 +141,7 @@ func (s *Supervisor) StartTask(name string) error {
 
 		process.commandQueue = make(chan ProcessCommand, 3)
 
-		go process.Run(s.ctx, *config)
+		s.waitGroup.Go(func() { process.Run(context.Background(), *config) })
 	}
 
 	return nil
@@ -193,6 +189,8 @@ func (s *Supervisor) DestroyAllTasks() error {
 			process.commandQueue <- ProcessCommandDestroy
 		}
 	}
+
+	s.waitGroup.Wait()
 
 	return nil
 }
@@ -250,7 +248,6 @@ func (p *TaskProcess) Run(ctx context.Context, config MyTaskConfig) error {
 		p.cmd.Start()
 
 		done := make(chan error, 1)
-		shouldDestroy := false
 		shouldRestart := false
 
 		go func() {
@@ -259,11 +256,15 @@ func (p *TaskProcess) Run(ctx context.Context, config MyTaskConfig) error {
 
 		// Process startup
 		select {
+		case err := <-done:
+			p.status.Set(ProcessStatusStopped, err)
+			fmt.Println("Process exited early:", err)
+			// return err
+
 		case request := <-p.commandQueue:
 			switch request {
 			case ProcessCommandDestroy:
-				shouldDestroy = true
-				p.TerminateOrKill(done)
+				return p.TerminateOrKill(done)
 
 			case ProcessCommandStop:
 				p.TerminateOrKill(done)
@@ -272,11 +273,6 @@ func (p *TaskProcess) Run(ctx context.Context, config MyTaskConfig) error {
 				shouldRestart = true
 				p.TerminateOrKill(done)
 			}
-
-		case err := <-done:
-			p.status.Set(ProcessStatusStopped, err)
-			fmt.Println("Process exited early:", err)
-			// return err
 
 		case <-time.After(2 * time.Second):
 			p.status.Set(ProcessStatusRunning, nil)
@@ -285,11 +281,15 @@ func (p *TaskProcess) Run(ctx context.Context, config MyTaskConfig) error {
 
 		// Process is running
 		select {
+		case err := <-done:
+			p.status.Set(ProcessStatusStopped, err)
+			fmt.Println("Process exited:", err)
+			// return err
+
 		case request := <-p.commandQueue:
 			switch request {
 			case ProcessCommandDestroy:
-				shouldDestroy = true
-				p.TerminateOrKill(done)
+				return p.TerminateOrKill(done)
 
 			case ProcessCommandStop:
 				p.TerminateOrKill(done)
@@ -298,15 +298,6 @@ func (p *TaskProcess) Run(ctx context.Context, config MyTaskConfig) error {
 				shouldRestart = true
 				p.TerminateOrKill(done)
 			}
-
-		case err := <-done:
-			p.status.Set(ProcessStatusStopped, err)
-			fmt.Println("Process exited:", err)
-			// return err
-		}
-
-		if shouldDestroy {
-			return nil
 		}
 
 		for !shouldRestart {
