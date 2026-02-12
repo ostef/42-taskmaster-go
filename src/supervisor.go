@@ -251,7 +251,6 @@ func (p *TaskProcess) Run(ctx context.Context, config MyTaskConfig) error {
 		case err := <-done:
 			p.status.Set(ProcessStatusStopped, err)
 			fmt.Println("Process exited early:", err)
-			// return err
 
 		case request := <-p.commandQueue:
 			switch request {
@@ -276,7 +275,6 @@ func (p *TaskProcess) Run(ctx context.Context, config MyTaskConfig) error {
 		case err := <-done:
 			p.status.Set(ProcessStatusStopped, err)
 			fmt.Println("Process exited:", err)
-			// return err
 
 		case request := <-p.commandQueue:
 			switch request {
