@@ -64,6 +64,7 @@ type ProcessCommand uint
 const (
 	ProcessCommandStop    = iota
 	ProcessCommandRestart = iota
+	ProcessCommandDestroy = iota
 )
 
 type TaskProcess struct {
@@ -87,6 +88,7 @@ type MyTaskConfig struct {
 type Supervisor struct {
 	tasks    []*Task
 	myConfig []MyTaskConfig
+	ctx      context.Context
 }
 
 func (s *Supervisor) getTaskConfig(name string) *MyTaskConfig {
@@ -105,6 +107,10 @@ func (s *Supervisor) getTask(name string) *Task {
 	}
 
 	return s.tasks[idx]
+}
+
+func (s *Supervisor) Init() {
+	s.ctx = context.Background()
 }
 
 func (s *Supervisor) StartTask(name string) error {
@@ -139,7 +145,7 @@ func (s *Supervisor) StartTask(name string) error {
 
 		process.commandQueue = make(chan ProcessCommand, 3)
 
-		go process.Run(*config)
+		go process.Run(s.ctx, *config)
 	}
 
 	return nil
@@ -175,6 +181,16 @@ func (s *Supervisor) StopAllTasks() error {
 	for _, task := range s.tasks {
 		for _, process := range task.processes {
 			process.commandQueue <- ProcessCommandStop
+		}
+	}
+
+	return nil
+}
+
+func (s *Supervisor) DestroyAllTasks() error {
+	for _, task := range s.tasks {
+		for _, process := range task.processes {
+			process.commandQueue <- ProcessCommandDestroy
 		}
 	}
 
@@ -222,7 +238,7 @@ func (p *TaskProcess) TerminateOrKill(done chan error) error {
 	}
 }
 
-func (p *TaskProcess) Run(config MyTaskConfig) error {
+func (p *TaskProcess) Run(ctx context.Context, config MyTaskConfig) error {
 	for true {
 		fmt.Println("Starting process for", config.name)
 
@@ -234,6 +250,7 @@ func (p *TaskProcess) Run(config MyTaskConfig) error {
 		p.cmd.Start()
 
 		done := make(chan error, 1)
+		shouldDestroy := false
 		shouldRestart := false
 
 		go func() {
@@ -244,6 +261,10 @@ func (p *TaskProcess) Run(config MyTaskConfig) error {
 		select {
 		case request := <-p.commandQueue:
 			switch request {
+			case ProcessCommandDestroy:
+				shouldDestroy = true
+				p.TerminateOrKill(done)
+
 			case ProcessCommandStop:
 				p.TerminateOrKill(done)
 
@@ -266,6 +287,10 @@ func (p *TaskProcess) Run(config MyTaskConfig) error {
 		select {
 		case request := <-p.commandQueue:
 			switch request {
+			case ProcessCommandDestroy:
+				shouldDestroy = true
+				p.TerminateOrKill(done)
+
 			case ProcessCommandStop:
 				p.TerminateOrKill(done)
 
@@ -280,10 +305,17 @@ func (p *TaskProcess) Run(config MyTaskConfig) error {
 			// return err
 		}
 
+		if shouldDestroy {
+			return nil
+		}
+
 		for !shouldRestart {
 			request := <-p.commandQueue
-			if request == ProcessCommandRestart {
+			switch request {
+			case ProcessCommandRestart:
 				shouldRestart = true
+			case ProcessCommandDestroy:
+				return nil
 			}
 		}
 	}

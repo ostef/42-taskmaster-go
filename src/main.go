@@ -2,7 +2,9 @@ package main
 
 func main() {
 	var supervisor Supervisor
-	defer supervisor.StopAllTasks()
+	supervisor.Init()
+
+	defer supervisor.DestroyAllTasks()
 
 	supervisor.myConfig = append(supervisor.myConfig, MyTaskConfig{
 		name:         "say_hello",

@@ -88,6 +88,8 @@ func (s *Shell) Loop() {
 				fmt.Println("Error: Expected 0 argument for 'exit' command. Exiting anyways")
 			}
 
+			s.supervisor.DestroyAllTasks()
+
 			return
 
 		default:
