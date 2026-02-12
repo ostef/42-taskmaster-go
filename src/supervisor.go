@@ -14,24 +14,26 @@ import (
 type ProcessStatus struct {
 	mutex sync.RWMutex
 	value uint
+	err   error
 }
 
-func (s *ProcessStatus) Set(status uint) {
+func (s *ProcessStatus) Set(status uint, err error) {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
 
 	s.value = status
+	s.err = err
 }
 
-func (s *ProcessStatus) Get() uint {
+func (s *ProcessStatus) Get() (uint, error) {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
 
-	return s.value
+	return s.value, s.err
 }
 
 func (s *ProcessStatus) String() string {
-	status := s.Get()
+	status, err := s.Get()
 
 	switch status {
 	case ProcessStatusStarted:
@@ -41,11 +43,11 @@ func (s *ProcessStatus) String() string {
 	case ProcessStatusStopping:
 		return "stopping"
 	case ProcessStatusStopped:
-		return "stopped"
+		return fmt.Sprintf("stopped (%v)", err)
 	case ProcessStatusKilled:
-		return "killed"
+		return fmt.Sprintf("killed (%v)", err)
 	default:
-		return "???"
+		return fmt.Sprintf("??? (%v)", err)
 	}
 }
 
@@ -120,7 +122,7 @@ func (s *Supervisor) StartTask(name string) error {
 	}
 
 	for _, process := range task.processes {
-		status := process.status.Get()
+		status, _ := process.status.Get()
 		if status != ProcessStatusStopped && status != ProcessStatusKilled {
 			return fmt.Errorf("Task '%v' still has some running processes", name)
 		}
@@ -206,7 +208,7 @@ func (p *TaskProcess) TerminateOrKill(done chan error) error {
 	select {
 	case err := <-done:
 		fmt.Println("Process exited gracefully:", err)
-		p.status.Set(ProcessStatusStopped)
+		p.status.Set(ProcessStatusStopped, err)
 		return err
 
 	case <-time.After(2 * time.Second):
@@ -214,7 +216,7 @@ func (p *TaskProcess) TerminateOrKill(done chan error) error {
 		_ = p.cmd.Process.Kill()
 		err := <-done
 		fmt.Println("Process killed:", err)
-		p.status.Set(ProcessStatusKilled)
+		p.status.Set(ProcessStatusKilled, err)
 
 		return err
 	}
@@ -228,7 +230,7 @@ func (p *TaskProcess) Run(config MyTaskConfig) error {
 		p.cmd.Stdout = os.Stdout
 		p.cmd.Stderr = os.Stderr
 
-		p.status.Set(ProcessStatusStarted)
+		p.status.Set(ProcessStatusStarted, nil)
 		p.cmd.Start()
 
 		done := make(chan error, 1)
@@ -251,12 +253,12 @@ func (p *TaskProcess) Run(config MyTaskConfig) error {
 			}
 
 		case err := <-done:
-			p.status.Set(ProcessStatusStopped)
+			p.status.Set(ProcessStatusStopped, err)
 			fmt.Println("Process exited early:", err)
 			// return err
 
 		case <-time.After(2 * time.Second):
-			p.status.Set(ProcessStatusRunning)
+			p.status.Set(ProcessStatusRunning, nil)
 			fmt.Println("Process has sucessfully started")
 		}
 
@@ -273,7 +275,7 @@ func (p *TaskProcess) Run(config MyTaskConfig) error {
 			}
 
 		case err := <-done:
-			p.status.Set(ProcessStatusStopped)
+			p.status.Set(ProcessStatusStopped, err)
 			fmt.Println("Process exited:", err)
 			// return err
 		}
