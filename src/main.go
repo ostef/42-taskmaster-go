@@ -77,7 +77,7 @@ func main() {
 		fmt.Println("usage: taskmaster <config.yml>")
 		os.Exit(1)
 	}
-	config, err := parseConfig("test.yml")
+	config, err := ParseConfig("test.yml")
 	if err != nil {
 		fmt.Println(err)
 		return

@@ -108,7 +108,7 @@ func validateTask(task TaskConfig, programName string) error {
 	return nil
 }
 
-func parseConfig(file_path string) (*Config, error) {
+func ParseConfig(file_path string) (*Config, error) {
 	data, err := os.ReadFile(file_path)
 	if err != nil {
 		return nil, fmt.Errorf("cannot read file %s: %w", file_path, err)
