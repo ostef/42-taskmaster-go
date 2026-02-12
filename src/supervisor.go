@@ -126,7 +126,12 @@ func (s *Supervisor) StartTask(name string) error {
 		}
 	}
 
-	for range config.numProcesses {
+	for _, process := range task.processes {
+		process.commandQueue <- ProcessCommandRestart
+	}
+
+	numNewProcessesToSpawn := config.numProcesses - len(task.processes)
+	for range numNewProcessesToSpawn {
 		process := new(TaskProcess)
 		task.processes = append(task.processes, process)
 
@@ -194,21 +199,21 @@ func (s *Supervisor) PrintStatus() {
 	}
 }
 
-func (p *TaskProcess) SendTermSignal(done chan error) error {
-	// fmt.Println("Shutting down process...")
+func (p *TaskProcess) TerminateOrKill(done chan error) error {
+	fmt.Println("Shutting down process...")
 	_ = p.cmd.Process.Signal(syscall.SIGTERM)
 
 	select {
 	case err := <-done:
-		// fmt.Println("Process exited gracefully:", err)
+		fmt.Println("Process exited gracefully:", err)
 		p.status.Set(ProcessStatusStopped)
 		return err
 
 	case <-time.After(2 * time.Second):
-		// fmt.Println("Process still exiting, sending SIGKILL...")
+		fmt.Println("Process still exiting, sending SIGKILL...")
 		_ = p.cmd.Process.Kill()
 		err := <-done
-		// fmt.Println("Process killed:", err)
+		fmt.Println("Process killed:", err)
 		p.status.Set(ProcessStatusKilled)
 
 		return err
@@ -217,17 +222,17 @@ func (p *TaskProcess) SendTermSignal(done chan error) error {
 
 func (p *TaskProcess) Run(config MyTaskConfig) error {
 	for true {
-		p.cmd = exec.CommandContext(context.Background(), config.command, config.args...)
+		fmt.Println("Starting process for", config.name)
 
+		p.cmd = exec.CommandContext(context.Background(), config.command, config.args...)
 		p.cmd.Stdout = os.Stdout
 		p.cmd.Stderr = os.Stderr
-
-		// fmt.Println("Starting process for", config.name)
 
 		p.status.Set(ProcessStatusStarted)
 		p.cmd.Start()
 
 		done := make(chan error, 1)
+		shouldRestart := false
 
 		go func() {
 			done <- p.cmd.Wait()
@@ -238,20 +243,21 @@ func (p *TaskProcess) Run(config MyTaskConfig) error {
 		case request := <-p.commandQueue:
 			switch request {
 			case ProcessCommandStop:
-				return p.SendTermSignal(done)
+				p.TerminateOrKill(done)
 
 			case ProcessCommandRestart:
-				p.SendTermSignal(done)
+				shouldRestart = true
+				p.TerminateOrKill(done)
 			}
 
 		case err := <-done:
 			p.status.Set(ProcessStatusStopped)
-			// fmt.Println("Process exited early:", err)
-			return err
+			fmt.Println("Process exited early:", err)
+			// return err
 
 		case <-time.After(2 * time.Second):
 			p.status.Set(ProcessStatusRunning)
-			// fmt.Println("Process has sucessfully started")
+			fmt.Println("Process has sucessfully started")
 		}
 
 		// Process is running
@@ -259,16 +265,24 @@ func (p *TaskProcess) Run(config MyTaskConfig) error {
 		case request := <-p.commandQueue:
 			switch request {
 			case ProcessCommandStop:
-				return p.SendTermSignal(done)
+				p.TerminateOrKill(done)
 
 			case ProcessCommandRestart:
-				p.SendTermSignal(done)
+				shouldRestart = true
+				p.TerminateOrKill(done)
 			}
 
 		case err := <-done:
 			p.status.Set(ProcessStatusStopped)
-			// fmt.Println("Process exited:", err)
-			return err
+			fmt.Println("Process exited:", err)
+			// return err
+		}
+
+		for !shouldRestart {
+			request := <-p.commandQueue
+			if request == ProcessCommandRestart {
+				shouldRestart = true
+			}
 		}
 	}
 
