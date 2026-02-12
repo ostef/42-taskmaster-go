@@ -150,7 +150,7 @@ func (s *Supervisor) StartTask(name string) error {
 func (s *Supervisor) StopTask(name string) error {
 	task := s.getTask(name)
 	if task == nil {
-		return fmt.Errorf("No task '%v'", name)
+		return fmt.Errorf("No task named '%v'", name)
 	}
 
 	for _, process := range task.processes {
@@ -173,16 +173,6 @@ func (s *Supervisor) RestartTask(name string) error {
 	return nil
 }
 
-func (s *Supervisor) StopAllTasks() error {
-	for _, task := range s.tasks {
-		for _, process := range task.processes {
-			process.commandQueue <- ProcessCommandStop
-		}
-	}
-
-	return nil
-}
-
 func (s *Supervisor) DestroyAllTasks() error {
 	for _, task := range s.tasks {
 		for _, process := range task.processes {
@@ -191,6 +181,8 @@ func (s *Supervisor) DestroyAllTasks() error {
 	}
 
 	s.waitGroup.Wait()
+
+	s.tasks = nil
 
 	return nil
 }
