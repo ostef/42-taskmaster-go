@@ -11,7 +11,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	config, err := ParseConfig("test.yml")
+	config, err := ParseConfig(os.Args[1])
 	if err != nil {
 		fmt.Println(err)
 		return
