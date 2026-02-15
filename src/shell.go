@@ -11,6 +11,16 @@ type Shell struct {
 	supervisor *Supervisor
 }
 
+func (s *Shell) PrintHelp() {
+	fmt.Println("Commands:")
+	fmt.Println("  help")
+	fmt.Println("  start {task}")
+	fmt.Println("  stop {task}")
+	fmt.Println("  restart {task}")
+	fmt.Println("  status")
+	fmt.Println("  exit")
+}
+
 func (s *Shell) Loop() {
 	reader := bufio.NewReader(os.Stdin)
 
@@ -91,6 +101,14 @@ func (s *Shell) Loop() {
 			s.supervisor.DestroyAllTasks()
 
 			return
+
+		case "help":
+			if len(args) != 0 {
+				fmt.Println("Error: Expected 0 argument for 'help' command")
+				continue
+			}
+
+			s.PrintHelp()
 
 		default:
 			fmt.Printf("Unknown command '%v'\n", cmd)
