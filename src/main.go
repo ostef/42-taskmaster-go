@@ -21,19 +21,6 @@ func main() {
 	defer supervisor.DestroyAllTasks()
 
 	supervisor.config = config
-	// supervisor.myConfig = append(supervisor.myConfig, MyTaskConfig{
-	// 	Name:         "say_hello",
-	// 	Command:      "echo",
-	// 	Args:         []string{"hello", "sailor"},
-	// 	NumProcesses: 3,
-	// })
-
-	// supervisor.myConfig = append(supervisor.myConfig, MyTaskConfig{
-	// 	Name:         "sleep",
-	// 	Command:      "sleep",
-	// 	Args:         []string{"10"},
-	// 	NumProcesses: 3,
-	// })
 
 	var shell Shell
 	shell.supervisor = &supervisor
