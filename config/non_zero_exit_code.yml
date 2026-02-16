@@ -1,4 +1,0 @@
-programs:
-  test:
-    cmd: "./tests/non_zero_exit_code"
-    exitcodes: [10]

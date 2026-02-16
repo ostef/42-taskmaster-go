@@ -289,6 +289,10 @@ func (p *TaskProcess) Run(ctx context.Context) error {
 		p.cmd.Stdout = os.Stdout
 		p.cmd.Stderr = os.Stderr
 
+		for name, val := range config.Env {
+			p.cmd.Env = append(p.cmd.Env, fmt.Sprintf("%v=%v", name, val))
+		}
+
 		err := p.cmd.Start()
 		if err != nil {
 			fmt.Println("Could not start process:", err)
