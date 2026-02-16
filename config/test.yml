@@ -8,3 +8,6 @@ programs:
       NAME: "Hello"
       VALUE: 1
       OCCUPATION: unemployed
+  working_dir:
+    cmd: "../tests/working_dir"
+    workingdir: "./config"

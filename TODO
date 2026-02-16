@@ -3,7 +3,6 @@
 * Handle expected exit codes
 * Review config parsing validation
 * Improve shell
-* Handle working dir
 * Handle umask
 * Handle stdout and stderr
 * Logging

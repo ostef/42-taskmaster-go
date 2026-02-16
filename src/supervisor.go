@@ -290,6 +290,10 @@ func (p *TaskProcess) Run(ctx context.Context) error {
 		p.cmd.Stdout = os.Stdout
 		p.cmd.Stderr = os.Stderr
 
+		if config.WorkingDir != "" {
+			p.cmd.Dir = config.WorkingDir
+		}
+
 		for name, val := range config.Env {
 			p.cmd.Env = append(p.cmd.Env, fmt.Sprintf("%v=%v", name, val))
 		}
