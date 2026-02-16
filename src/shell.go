@@ -17,6 +17,7 @@ func (s *Shell) PrintHelp() {
 	fmt.Println("  start {task}")
 	fmt.Println("  stop {task}")
 	fmt.Println("  restart {task}")
+	fmt.Println("  reload")
 	fmt.Println("  status")
 	fmt.Println("  exit")
 }
@@ -84,6 +85,14 @@ func (s *Shell) Loop() {
 			if err != nil {
 				fmt.Println("Error:", err)
 			}
+
+		case "reload":
+			if len(args) != 0 {
+				fmt.Println("Error: Expected 0 argument for 'reload' command")
+				continue
+			}
+
+			s.supervisor.ReloadConfig()
 
 		case "status":
 			if len(args) != 0 {

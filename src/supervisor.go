@@ -244,6 +244,18 @@ func (s *Supervisor) PrintStatus() {
 	}
 }
 
+func (s *Supervisor) ReloadConfig() error {
+	cfg, err := ParseConfig(s.config.filename)
+	if err != nil {
+		return err
+	}
+
+	s.config = cfg
+	// @Todo: stop tasks that have been removed, update task num processes, ...
+
+	return nil
+}
+
 func (p *TaskProcess) TerminateOrKill(done chan error) error {
 	fmt.Println("Shutting down process...")
 	_ = p.cmd.Process.Signal(syscall.SIGTERM)
