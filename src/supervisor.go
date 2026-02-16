@@ -7,7 +7,6 @@ import (
 	"os/exec"
 	"slices"
 	"sync"
-	"syscall"
 	"time"
 )
 
@@ -256,9 +255,12 @@ func (s *Supervisor) ReloadConfig() error {
 	return nil
 }
 
-func (p *TaskProcess) TerminateOrKill(done chan error) error {
+func (p *TaskProcess) Stop(done chan error) error {
 	fmt.Println("Shutting down process...")
-	_ = p.cmd.Process.Signal(syscall.SIGTERM)
+
+	config := p.getConfig()
+
+	_ = p.cmd.Process.Signal(config.StopSignal)
 
 	select {
 	case err := <-done:
@@ -266,7 +268,7 @@ func (p *TaskProcess) TerminateOrKill(done chan error) error {
 		p.status.Set(ProcessStatusStopped, err)
 		return err
 
-	case <-time.After(2 * time.Second):
+	case <-time.After(time.Duration(config.SecondsAfterStopRequestBeforeProgramKill) * time.Second):
 		fmt.Println("Process still exiting, sending SIGKILL...")
 		_ = p.cmd.Process.Kill()
 		err := <-done
@@ -313,17 +315,17 @@ func (p *TaskProcess) Run(ctx context.Context) error {
 		case request := <-p.commandQueue:
 			switch request {
 			case ProcessCommandDestroy:
-				return p.TerminateOrKill(done)
+				return p.Stop(done)
 
 			case ProcessCommandStop:
-				p.TerminateOrKill(done)
+				p.Stop(done)
 
 			case ProcessCommandRestart:
 				shouldRestart = true
-				p.TerminateOrKill(done)
+				p.Stop(done)
 			}
 
-		case <-time.After(2 * time.Second):
+		case <-time.After(time.Duration(config.StartupTimeInSeconds) * time.Second):
 			p.status.Set(ProcessStatusRunning, nil)
 			fmt.Println("Process has sucessfully started")
 		}
@@ -339,14 +341,14 @@ func (p *TaskProcess) Run(ctx context.Context) error {
 		case request := <-p.commandQueue:
 			switch request {
 			case ProcessCommandDestroy:
-				return p.TerminateOrKill(done)
+				return p.Stop(done)
 
 			case ProcessCommandStop:
-				p.TerminateOrKill(done)
+				p.Stop(done)
 
 			case ProcessCommandRestart:
 				shouldRestart = true
-				p.TerminateOrKill(done)
+				p.Stop(done)
 			}
 		}
 

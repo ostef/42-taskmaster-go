@@ -18,21 +18,22 @@ const (
 )
 
 type RawTask struct {
-	Cmd          string            `yaml:"cmd"`
-	Args         []string          `yaml:"args"`
-	NumProcs     *int              `yaml:"numprocs"`
-	Umask        *uint32           `yaml:"umask"`
-	WorkingDir   string            `yaml:"workingdir"`
-	AutoStart    *bool             `yaml:"autostart"`
-	AutoRestart  string            `yaml:"autorestart"`
-	ExitCodes    any               `yaml:"exitcodes"`
-	StartRetries *int              `yaml:"startretries"`
-	StartTime    *float64          `yaml:"starttime"`
-	StopSignal   string            `yaml:"stopsignal"`
-	StopTime     *float64          `yaml:"stoptime"`
-	Stdout       string            `yaml:"stdout"`
-	Stderr       string            `yaml:"stderr"`
-	Env          map[string]string `yaml:"env"`
+	Cmd           string            `yaml:"cmd"`
+	Args          []string          `yaml:"args"`
+	NumProcs      *int              `yaml:"numprocs"`
+	Umask         *uint32           `yaml:"umask"`
+	WorkingDir    string            `yaml:"workingdir"`
+	AutoStart     *bool             `yaml:"autostart"`
+	AutoRestart   string            `yaml:"autorestart"`
+	ExitCodes     any               `yaml:"exitcodes"`
+	StartRetries  *int              `yaml:"startretries"`
+	AutoStartTime *float64          `yaml:"autostarttime"`
+	StartTime     *float64          `yaml:"starttime"`
+	StopSignal    string            `yaml:"stopsignal"`
+	StopTime      *float64          `yaml:"stoptime"`
+	Stdout        string            `yaml:"stdout"`
+	Stderr        string            `yaml:"stderr"`
+	Env           map[string]string `yaml:"env"`
 }
 
 type RawConfig struct {
@@ -50,6 +51,7 @@ type TaskConfig struct {
 	Stderr                                   string
 	AutoStart                                bool
 	SecondsToWaitBeforeAutoStart             float64
+	StartupTimeInSeconds                     float64
 	AutoRestart                              AutoRestartPolicy
 	MaxAutoRestarts                          int
 	ExpectedExitCodes                        []int
@@ -184,6 +186,7 @@ func ParseConfig(file_path string) (Config, error) {
 		if err != nil {
 			return Config{}, fmt.Errorf("program %s, autorestart error:  %w", name, err)
 		}
+
 		stopSignal := syscall.SIGTERM
 		if tasks.StopSignal != "" {
 			stopSignal, err = parseSignal(tasks.StopSignal)
@@ -207,7 +210,8 @@ func ParseConfig(file_path string) (Config, error) {
 			Stdout:                                   tasks.Stdout,
 			Stderr:                                   tasks.Stderr,
 			AutoStart:                                setDefaultValueIfNull(tasks.AutoStart, false),
-			SecondsToWaitBeforeAutoStart:             setDefaultValueIfNull(tasks.StartTime, 0),
+			SecondsToWaitBeforeAutoStart:             setDefaultValueIfNull(tasks.AutoStartTime, 0),
+			StartupTimeInSeconds:                     setDefaultValueIfNull(tasks.StartTime, 1),
 			AutoRestart:                              autoRestart,
 			MaxAutoRestarts:                          setDefaultValueIfNull(tasks.StartRetries, 5),
 			ExpectedExitCodes:                        exitCodes,

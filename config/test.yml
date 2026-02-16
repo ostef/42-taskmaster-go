@@ -18,7 +18,7 @@ programs:
     stderr: /tmp/nginx.stderr
     env:
       STARTED_BY: taskmaster
-    ANSWER: 42
+      ANSWER: 42
   vogsphere:
     cmd: "/usr/local/bin/vogsphere-worker"
     args: ["--no-prefork"]
@@ -34,3 +34,8 @@ programs:
     stoptime: 10
     stdout: /tmp/vgsworker.stdout
     stderr: /tmp/vgsworker.stderr
+  sleep:
+    cmd: "sleep"
+    args: ["10"]
+    numprocs: 10
+    starttime: 0

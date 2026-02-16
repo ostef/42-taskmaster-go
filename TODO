@@ -1,0 +1,6 @@
+* Update tasks when the config changes
+* Handle auto restart and max auto restart
+* Handle auto start
+* Handle expected exit codes
+* Review config parsing validation
+* Improve shell

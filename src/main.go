@@ -17,8 +17,6 @@ func main() {
 		return
 	}
 
-	fmt.Printf("%+v\n", config)
-
 	var supervisor Supervisor
 	defer supervisor.DestroyAllTasks()
 
