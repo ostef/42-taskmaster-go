@@ -1,5 +1,5 @@
 programs:
-  test:
+  non_zero_exit_code:
     cmd: "./tests/non_zero_exit_code"
     exitcodes: [10]
   print_env:

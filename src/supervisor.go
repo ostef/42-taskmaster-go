@@ -280,6 +280,7 @@ func (p *TaskProcess) Stop(done chan error) error {
 }
 
 func (p *TaskProcess) Run(ctx context.Context) error {
+	numAutoRestarts := 0
 	for true {
 		config := p.getConfig()
 
@@ -303,30 +304,30 @@ func (p *TaskProcess) Run(ctx context.Context) error {
 
 		p.status.Set(ProcessStatusStarted, nil)
 
-		done := make(chan error, 1)
+		doneCh := make(chan error, 1)
 		shouldRestart := false
 
 		go func() {
-			done <- p.cmd.Wait()
+			doneCh <- p.cmd.Wait()
 		}()
 
 		// Process startup
 		select {
-		case err := <-done:
+		case err := <-doneCh:
 			p.status.Set(ProcessStatusStopped, err)
 			fmt.Println("Process exited early:", err)
 
 		case request := <-p.commandQueue:
 			switch request {
 			case ProcessCommandDestroy:
-				return p.Stop(done)
+				return p.Stop(doneCh)
 
 			case ProcessCommandStop:
-				p.Stop(done)
+				p.Stop(doneCh)
 
 			case ProcessCommandRestart:
+				p.Stop(doneCh)
 				shouldRestart = true
-				p.Stop(done)
 			}
 
 		case <-time.After(time.Duration(config.StartupTimeInSeconds) * time.Second):
@@ -334,27 +335,38 @@ func (p *TaskProcess) Run(ctx context.Context) error {
 			fmt.Println("Process has sucessfully started")
 		}
 
-		config = p.getConfig()
+		status, _ := p.status.Get()
+		if status == ProcessStatusRunning {
+			config = p.getConfig()
 
-		// Process is running
-		select {
-		case err := <-done:
-			p.status.Set(ProcessStatusStopped, err)
-			fmt.Println("Process exited:", err)
+			select {
+			case err := <-doneCh:
+				p.status.Set(ProcessStatusStopped, err)
+				fmt.Println("Process exited:", err)
 
-		case request := <-p.commandQueue:
-			switch request {
-			case ProcessCommandDestroy:
-				return p.Stop(done)
+			case request := <-p.commandQueue:
+				switch request {
+				case ProcessCommandDestroy:
+					return p.Stop(doneCh)
 
-			case ProcessCommandStop:
-				p.Stop(done)
+				case ProcessCommandStop:
+					p.Stop(doneCh)
 
-			case ProcessCommandRestart:
-				shouldRestart = true
-				p.Stop(done)
+				case ProcessCommandRestart:
+					shouldRestart = true
+					p.Stop(doneCh)
+				}
 			}
 		}
+
+		config = p.getConfig()
+
+		if config.AutoRestart == AutoRestartAlways && numAutoRestarts < config.MaxAutoRestarts {
+			numAutoRestarts += 1
+			continue
+		}
+
+		numAutoRestarts = 0
 
 		for !shouldRestart {
 			request := <-p.commandQueue
