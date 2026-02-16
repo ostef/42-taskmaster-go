@@ -19,6 +19,7 @@ const (
 
 type RawTask struct {
 	Cmd          string            `yaml:"cmd"`
+	Args         []string          `yaml:"args"`
 	NumProcs     *int              `yaml:"numprocs"`
 	Umask        *uint32           `yaml:"umask"`
 	WorkingDir   string            `yaml:"workingdir"`
@@ -39,21 +40,22 @@ type RawConfig struct {
 }
 
 type TaskConfig struct {
-	name                                           string
-	command_line                                   string
-	env                                            map[string]string
-	working_directory                              string
-	num_processes                                  int
-	stdout_log_file                                string
-	stderr_log_file                                string
-	auto_start                                     bool
-	seconds_to_wait_before_auto_start              float64
-	auto_restart                                   AutoRestartPolicy
-	max_auto_restarts                              int
-	expected_exit_codes                            []int
-	stop_signal                                    syscall.Signal
-	seconds_after_stop_request_before_program_kill float64
-	umask                                          uint32
+	Name                                     string
+	Command                                  string
+	Args                                     []string
+	Env                                      map[string]string
+	WorkingDir                               string
+	NumProcesses                             int
+	Stdout                                   string
+	Stderr                                   string
+	AutoStart                                bool
+	SecondsToWaitBeforeAutoStart             float64
+	AutoRestart                              AutoRestartPolicy
+	MaxAutoRestarts                          int
+	ExpectedExitCodes                        []int
+	StopSignal                               syscall.Signal
+	SecondsAfterStopRequestBeforeProgramKill float64
+	Umask                                    uint32
 }
 
 type Config struct {
@@ -141,33 +143,33 @@ func parseExitCodes(exitCodes any) ([]int, error) {
 }
 
 func validateTask(task TaskConfig, programName string) error {
-	if task.num_processes < 1 {
-		return fmt.Errorf("program %s: numprocs must be >= 1, got %d", programName, task.num_processes)
+	if task.NumProcesses < 1 {
+		return fmt.Errorf("program %s: numprocs must be >= 1, got %d", programName, task.NumProcesses)
 	}
-	if task.seconds_to_wait_before_auto_start < 0 {
-		return fmt.Errorf("program %s: starttime must be >= 0, got %v", programName, task.seconds_to_wait_before_auto_start)
+	if task.SecondsToWaitBeforeAutoStart < 0 {
+		return fmt.Errorf("program %s: starttime must be >= 0, got %v", programName, task.SecondsToWaitBeforeAutoStart)
 	}
-	if task.max_auto_restarts < 0 {
-		return fmt.Errorf("program %s: startretries must be >= 0, got %d", programName, task.max_auto_restarts)
+	if task.MaxAutoRestarts < 0 {
+		return fmt.Errorf("program %s: startretries must be >= 0, got %d", programName, task.MaxAutoRestarts)
 	}
-	if task.seconds_after_stop_request_before_program_kill < 0 {
-		return fmt.Errorf("program %s: stoptime must be >= 0, got %v", programName, task.seconds_after_stop_request_before_program_kill)
+	if task.SecondsAfterStopRequestBeforeProgramKill < 0 {
+		return fmt.Errorf("program %s: stoptime must be >= 0, got %v", programName, task.SecondsAfterStopRequestBeforeProgramKill)
 	}
-	if task.umask > 0777 {
-		return fmt.Errorf("program %s: umask must be <= 0777, got %o", programName, task.umask)
+	if task.Umask > 0777 {
+		return fmt.Errorf("program %s: umask must be <= 0777, got %o", programName, task.Umask)
 	}
 
 	return nil
 }
 
-func ParseConfig(file_path string) (*Config, error) {
+func ParseConfig(file_path string) (Config, error) {
 	data, err := os.ReadFile(file_path)
 	if err != nil {
-		return nil, fmt.Errorf("cannot read file %s: %w", file_path, err)
+		return Config{}, fmt.Errorf("cannot read file %s: %w", file_path, err)
 	}
 	var raw RawConfig
 	if err := yaml.Unmarshal(data, &raw); err != nil {
-		return nil, fmt.Errorf("invalid YAML from %s: %w", file_path, err)
+		return Config{}, fmt.Errorf("invalid YAML from %s: %w", file_path, err)
 	}
 
 	filename := filepath.Base(file_path)
@@ -175,49 +177,50 @@ func ParseConfig(file_path string) (*Config, error) {
 
 	for name, tasks := range raw.Programs {
 		if tasks.Cmd == "" {
-			return nil, fmt.Errorf("program %s: cmd is required", name)
+			return Config{}, fmt.Errorf("program %s: cmd is required", name)
 		}
 
 		autoRestart, err := parseAutoRestart(tasks.AutoRestart)
 		if err != nil {
-			return nil, fmt.Errorf("program %s, autorestart error:  %w", name, err)
+			return Config{}, fmt.Errorf("program %s, autorestart error:  %w", name, err)
 		}
 		stopSignal := syscall.SIGTERM
 		if tasks.StopSignal != "" {
 			stopSignal, err = parseSignal(tasks.StopSignal)
 			if err != nil {
-				return nil, fmt.Errorf("program %s, stopsignal error: %w", name, err)
+				return Config{}, fmt.Errorf("program %s, stopsignal error: %w", name, err)
 			}
 		}
 
 		exitCodes, err := parseExitCodes(tasks.ExitCodes)
 		if err != nil {
-			return nil, fmt.Errorf("program %s, exit code error: %w", name, err)
+			return Config{}, fmt.Errorf("program %s, exit code error: %w", name, err)
 		}
 
 		task := TaskConfig{
-			name:                              name,
-			command_line:                      tasks.Cmd,
-			env:                               tasks.Env,
-			working_directory:                 tasks.WorkingDir,
-			num_processes:                     setDefaultValueIfNull(tasks.NumProcs, 1),
-			stdout_log_file:                   tasks.Stdout,
-			stderr_log_file:                   tasks.Stderr,
-			auto_start:                        setDefaultValueIfNull(tasks.AutoStart, false),
-			seconds_to_wait_before_auto_start: setDefaultValueIfNull(tasks.StartTime, 0),
-			auto_restart:                      autoRestart,
-			max_auto_restarts:                 setDefaultValueIfNull(tasks.StartRetries, 5),
-			expected_exit_codes:               exitCodes,
-			stop_signal:                       stopSignal,
-			umask:                             setDefaultValueIfNull(tasks.Umask, uint32(0)),
-			seconds_after_stop_request_before_program_kill: setDefaultValueIfNull(tasks.StopTime, 5),
+			Name:                                     name,
+			Command:                                  tasks.Cmd,
+			Args:                                     tasks.Args,
+			Env:                                      tasks.Env,
+			WorkingDir:                               tasks.WorkingDir,
+			NumProcesses:                             setDefaultValueIfNull(tasks.NumProcs, 1),
+			Stdout:                                   tasks.Stdout,
+			Stderr:                                   tasks.Stderr,
+			AutoStart:                                setDefaultValueIfNull(tasks.AutoStart, false),
+			SecondsToWaitBeforeAutoStart:             setDefaultValueIfNull(tasks.StartTime, 0),
+			AutoRestart:                              autoRestart,
+			MaxAutoRestarts:                          setDefaultValueIfNull(tasks.StartRetries, 5),
+			ExpectedExitCodes:                        exitCodes,
+			StopSignal:                               stopSignal,
+			Umask:                                    setDefaultValueIfNull(tasks.Umask, uint32(0)),
+			SecondsAfterStopRequestBeforeProgramKill: setDefaultValueIfNull(tasks.StopTime, 5),
 		}
 
 		err = validateTask(task, name)
 		if err != nil {
-			return nil, err
+			return Config{}, err
 		}
 		config.tasks = append(config.tasks, task)
 	}
-	return &config, nil
+	return config, nil
 }

@@ -17,24 +17,25 @@ func main() {
 		return
 	}
 
-	fmt.Printf("%+v\n", *config)
+	fmt.Printf("%+v\n", config)
 
 	var supervisor Supervisor
 	defer supervisor.DestroyAllTasks()
 
-	supervisor.myConfig = append(supervisor.myConfig, MyTaskConfig{
-		name:         "say_hello",
-		command:      "echo",
-		args:         []string{"hello", "sailor"},
-		numProcesses: 3,
-	})
+	supervisor.config = config
+	// supervisor.myConfig = append(supervisor.myConfig, MyTaskConfig{
+	// 	Name:         "say_hello",
+	// 	Command:      "echo",
+	// 	Args:         []string{"hello", "sailor"},
+	// 	NumProcesses: 3,
+	// })
 
-	supervisor.myConfig = append(supervisor.myConfig, MyTaskConfig{
-		name:         "sleep",
-		command:      "sleep",
-		args:         []string{"10"},
-		numProcesses: 3,
-	})
+	// supervisor.myConfig = append(supervisor.myConfig, MyTaskConfig{
+	// 	Name:         "sleep",
+	// 	Command:      "sleep",
+	// 	Args:         []string{"10"},
+	// 	NumProcesses: 3,
+	// })
 
 	var shell Shell
 	shell.supervisor = &supervisor

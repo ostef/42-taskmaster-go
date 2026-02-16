@@ -36,6 +36,8 @@ func (s *ProcessStatus) String() string {
 	status, err := s.Get()
 
 	switch status {
+	case ProcessStatusNotStarted:
+		return "not started"
 	case ProcessStatusStarted:
 		return "started"
 	case ProcessStatusRunning:
@@ -46,17 +48,21 @@ func (s *ProcessStatus) String() string {
 		return fmt.Sprintf("stopped (%v)", err)
 	case ProcessStatusKilled:
 		return fmt.Sprintf("killed (%v)", err)
+	case ProcessStatusError:
+		return fmt.Sprintf("error (%v)", err)
 	default:
 		return fmt.Sprintf("??? (%v)", err)
 	}
 }
 
 const (
-	ProcessStatusStarted  = iota
-	ProcessStatusRunning  = iota
-	ProcessStatusStopping = iota
-	ProcessStatusStopped  = iota
-	ProcessStatusKilled   = iota
+	ProcessStatusNotStarted = iota
+	ProcessStatusStarted    = iota
+	ProcessStatusRunning    = iota
+	ProcessStatusStopping   = iota
+	ProcessStatusStopped    = iota
+	ProcessStatusKilled     = iota
+	ProcessStatusError      = iota // This means the process goroutine has stopped
 )
 
 type ProcessCommand uint
@@ -71,6 +77,24 @@ type TaskProcess struct {
 	status       ProcessStatus
 	cmd          *exec.Cmd
 	commandQueue chan ProcessCommand
+	config       TaskConfig
+	configMutex  sync.RWMutex
+}
+
+func (p *TaskProcess) getConfig() TaskConfig {
+	p.configMutex.Lock()
+	defer p.configMutex.Unlock()
+
+	cfg := p.config
+
+	return cfg
+}
+
+func (p *TaskProcess) setConfig(cfg TaskConfig) {
+	p.configMutex.Lock()
+	defer p.configMutex.Unlock()
+
+	p.config = cfg
 }
 
 type Task struct {
@@ -78,26 +102,19 @@ type Task struct {
 	processes []*TaskProcess
 }
 
-type MyTaskConfig struct {
-	name         string
-	command      string
-	args         []string
-	numProcesses int
-}
-
 type Supervisor struct {
 	waitGroup sync.WaitGroup
 	tasks     []*Task
-	myConfig  []MyTaskConfig
+	config    Config
 }
 
-func (s *Supervisor) getTaskConfig(name string) *MyTaskConfig {
-	idx := slices.IndexFunc(s.myConfig, func(t MyTaskConfig) bool { return t.name == name })
+func (s *Supervisor) getTaskConfig(name string) *TaskConfig {
+	idx := slices.IndexFunc(s.config.tasks, func(t TaskConfig) bool { return t.Name == name })
 	if idx < 0 {
 		return nil
 	}
 
-	return &s.myConfig[idx]
+	return &s.config.tasks[idx]
 }
 
 func (s *Supervisor) getTask(name string) *Task {
@@ -112,7 +129,7 @@ func (s *Supervisor) getTask(name string) *Task {
 func (s *Supervisor) StartTask(name string) error {
 	config := s.getTaskConfig(name)
 	if config == nil {
-		return fmt.Errorf("Unknown task '%v'", name)
+		return fmt.Errorf("No task named '%v'", name)
 	}
 
 	task := s.getTask(name)
@@ -125,23 +142,31 @@ func (s *Supervisor) StartTask(name string) error {
 
 	for _, process := range task.processes {
 		status, _ := process.status.Get()
-		if status != ProcessStatusStopped && status != ProcessStatusKilled {
+		if status == ProcessStatusStarted || status == ProcessStatusRunning || status == ProcessStatusStopping {
 			return fmt.Errorf("Task '%v' still has some running processes", name)
 		}
 	}
 
 	for _, process := range task.processes {
-		process.commandQueue <- ProcessCommandRestart
+		status, _ := process.status.Get()
+		if status == ProcessStatusError {
+			process.setConfig(*config)
+
+			s.waitGroup.Go(func() { process.Run(context.Background()) })
+		} else {
+			process.commandQueue <- ProcessCommandRestart
+		}
 	}
 
-	numNewProcessesToSpawn := config.numProcesses - len(task.processes)
+	numNewProcessesToSpawn := config.NumProcesses - len(task.processes)
 	for range numNewProcessesToSpawn {
 		process := new(TaskProcess)
 		task.processes = append(task.processes, process)
 
+		process.config = *config
 		process.commandQueue = make(chan ProcessCommand, 3)
 
-		s.waitGroup.Go(func() { process.Run(context.Background(), *config) })
+		s.waitGroup.Go(func() { process.Run(context.Background()) })
 	}
 
 	return nil
@@ -166,8 +191,20 @@ func (s *Supervisor) RestartTask(name string) error {
 		return s.StartTask(name)
 	}
 
+	config := s.getTaskConfig(name)
+	if config == nil {
+		return fmt.Errorf("No task named '%v'", name)
+	}
+
 	for _, process := range task.processes {
-		process.commandQueue <- ProcessCommandRestart
+		status, _ := process.status.Get()
+		if status == ProcessStatusError {
+			process.setConfig(*config)
+
+			s.waitGroup.Go(func() { process.Run(context.Background()) })
+		} else {
+			process.commandQueue <- ProcessCommandRestart
+		}
 	}
 
 	return nil
@@ -228,16 +265,25 @@ func (p *TaskProcess) TerminateOrKill(done chan error) error {
 	}
 }
 
-func (p *TaskProcess) Run(ctx context.Context, config MyTaskConfig) error {
+func (p *TaskProcess) Run(ctx context.Context) error {
 	for true {
-		fmt.Println("Starting process for", config.name)
+		config := p.getConfig()
 
-		p.cmd = exec.CommandContext(context.Background(), config.command, config.args...)
+		fmt.Printf("Starting process for %v\n", config.Name)
+
+		p.cmd = exec.CommandContext(context.Background(), config.Command, config.Args...)
 		p.cmd.Stdout = os.Stdout
 		p.cmd.Stderr = os.Stderr
 
+		err := p.cmd.Start()
+		if err != nil {
+			fmt.Println("Could not start process:", err)
+			p.status.Set(ProcessStatusError, err)
+
+			return err
+		}
+
 		p.status.Set(ProcessStatusStarted, nil)
-		p.cmd.Start()
 
 		done := make(chan error, 1)
 		shouldRestart := false
@@ -269,6 +315,8 @@ func (p *TaskProcess) Run(ctx context.Context, config MyTaskConfig) error {
 			p.status.Set(ProcessStatusRunning, nil)
 			fmt.Println("Process has sucessfully started")
 		}
+
+		config = p.getConfig()
 
 		// Process is running
 		select {
