@@ -1,5 +1,4 @@
 * Handle auto start
-* Handle expected exit codes
 * Review config parsing validation
 * Handle umask
 * Handle stdout and stderr
