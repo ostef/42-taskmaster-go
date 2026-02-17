@@ -3,7 +3,6 @@ package main
 import (
 	"fmt"
 	"os"
-	"path/filepath"
 	"syscall"
 
 	"gopkg.in/yaml.v3"
@@ -174,8 +173,7 @@ func ParseConfig(file_path string) (Config, error) {
 		return Config{}, fmt.Errorf("invalid YAML from %s: %w", file_path, err)
 	}
 
-	filename := filepath.Base(file_path)
-	config := Config{filename: filename}
+	config := Config{filename: file_path}
 
 	for name, tasks := range raw.Programs {
 		if tasks.Cmd == "" {
