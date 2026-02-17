@@ -1,15 +1,17 @@
 package main
 
 import (
-	"bufio"
 	"fmt"
-	"os"
 	"strings"
+
+	"github.com/peterh/liner"
 )
 
 type Shell struct {
 	supervisor *Supervisor
 }
+
+var commands = []string{"start", "stop", "restart", "reload", "status", "exit", "help"}
 
 func (s *Shell) PrintHelp() {
 	fmt.Println("Commands:")
@@ -23,28 +25,36 @@ func (s *Shell) PrintHelp() {
 }
 
 func (s *Shell) Loop() {
-	reader := bufio.NewReader(os.Stdin)
+	line := liner.NewLiner()
+	defer line.Close()
 
-	for {
-		fmt.Print("$> ")
-		line, _ := reader.ReadString('\n')
-		line = strings.TrimSpace(line)
-
-		parts := strings.Split(line, " ")
-
-		var args []string
-		for _, str := range parts {
-			if str != "" {
-				args = append(args, str)
+	line.SetCtrlCAborts(true)
+	line.SetCompleter(func(line string) (c []string) {
+		for _, n := range commands {
+			if strings.HasPrefix(n, strings.ToLower(line)) {
+				c = append(c, n)
 			}
 		}
+		return
+	})
 
-		if len(args) == 0 {
+	for {
+		input, err := line.Prompt("$> ")
+		if err != nil {
+			s.supervisor.DestroyAllTasks()
+			return
+		}
+
+		input = strings.TrimSpace(input)
+		if input == "" {
 			continue
 		}
 
-		cmd := args[0]
-		args = args[1:]
+		line.AppendHistory(input)
+
+		parts := strings.Fields(input)
+		cmd := parts[0]
+		args := parts[1:]
 
 		switch cmd {
 		case "start":
