@@ -4,4 +4,4 @@
 * Handle umask
 * Handle stdout and stderr
 * Logging
-* Allow processes to be removed from the Task.processes array only when they have fully exited their loop
+* Allow processes to be removed from the Task.processes array only when they have fully exited their loop (otherwise in certain circumstances like reloading like reloading the config we can't see their status if they don't shutdown gracefully for example)
