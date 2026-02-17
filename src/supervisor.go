@@ -168,7 +168,7 @@ func (s *Supervisor) StartTask(name string) error {
 		process := new(TaskProcess)
 		task.processes = append(task.processes, process)
 
-		process.config = *config
+		process.setConfig(*config)
 		process.commandQueue = make(chan ProcessCommand, 3)
 
 		s.waitGroup.Go(func() { process.Run(context.Background()) })
@@ -214,6 +214,17 @@ func (s *Supervisor) RestartTask(name string) error {
 		} else {
 			process.commandQueue <- ProcessCommandRestart
 		}
+	}
+
+	numNewProcessesToSpawn := config.NumProcesses - len(task.processes)
+	for range numNewProcessesToSpawn {
+		process := new(TaskProcess)
+		task.processes = append(task.processes, process)
+
+		process.setConfig(*config)
+		process.commandQueue = make(chan ProcessCommand, 3)
+
+		s.waitGroup.Go(func() { process.Run(context.Background()) })
 	}
 
 	return nil
@@ -311,7 +322,7 @@ func (s *Supervisor) UpdateTaskConfig(name string) {
 				process := new(TaskProcess)
 				task.processes = append(task.processes, process)
 
-				process.config = *config
+				process.setConfig(*config)
 				process.commandQueue = make(chan ProcessCommand, 3)
 
 				s.waitGroup.Go(func() { process.Run(context.Background()) })
