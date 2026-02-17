@@ -4,5 +4,4 @@
 * Handle umask
 * Handle stdout and stderr
 * Logging
-* Make sure the config field on each task's process is updated regularly
 * Allow processes to be removed from the Task.processes array only when they have fully exited their loop
