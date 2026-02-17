@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -11,18 +12,52 @@ import (
 	"time"
 )
 
+type ProcessStatusNoMutex struct {
+	value        uint
+	byUser       bool
+	expectedExit bool
+	exitCode     int
+	err          error
+}
+
 type ProcessStatus struct {
+	ProcessStatusNoMutex
 	mutex sync.RWMutex
-	value uint
-	err   error
+}
+
+func (s *ProcessStatus) SetExited(status uint, byUser bool, err error, expectedExitCodes []int) {
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
+
+	s.exitCode = 0
+	if err != nil {
+		var exitErr *exec.ExitError
+		if errors.As(err, &exitErr) {
+			s.exitCode = exitErr.ExitCode()
+		}
+	}
+
+	s.expectedExit = slices.Contains(expectedExitCodes, s.exitCode)
+	s.value = status
+	s.byUser = byUser
 }
 
 func (s *ProcessStatus) Set(status uint, err error) {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
 
+	s.exitCode = 0
+	if err != nil {
+		var exitErr *exec.ExitError
+		if errors.As(err, &exitErr) {
+			s.exitCode = exitErr.ExitCode()
+		}
+	}
+
 	s.value = status
 	s.err = err
+	s.expectedExit = false
+	s.byUser = false
 }
 
 func (s *ProcessStatus) Get() (uint, error) {
@@ -32,10 +67,18 @@ func (s *ProcessStatus) Get() (uint, error) {
 	return s.value, s.err
 }
 
-func (s *ProcessStatus) String() string {
-	status, err := s.Get()
+func (s *ProcessStatus) GetAll() ProcessStatusNoMutex {
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
 
-	switch status {
+	copied := s.ProcessStatusNoMutex
+	return copied
+}
+
+func (s *ProcessStatus) String() string {
+	status := s.GetAll()
+
+	switch status.value {
 	case ProcessStatusNotStarted:
 		return "not started"
 	case ProcessStatusStarted:
@@ -45,13 +88,27 @@ func (s *ProcessStatus) String() string {
 	case ProcessStatusStopping:
 		return "stopping"
 	case ProcessStatusStopped:
-		return fmt.Sprintf("stopped (%v)", err)
+		if status.expectedExit {
+			if status.byUser {
+				return fmt.Sprintf("stopped by user (expected, %v)", status.exitCode)
+			} else {
+				return fmt.Sprintf("stopped (expected, %v)", status.exitCode)
+			}
+		} else {
+			if status.byUser {
+				return fmt.Sprintf("stopped by user (unexpected, %v)", status.exitCode)
+			} else {
+				return fmt.Sprintf("stopped (unexpected, %v)", status.exitCode)
+			}
+		}
+
 	case ProcessStatusKilled:
-		return fmt.Sprintf("killed (%v)", err)
+		return fmt.Sprintf("killed (%v)", status.err)
+
 	case ProcessStatusError:
-		return fmt.Sprintf("error (%v)", err)
+		return fmt.Sprintf("error (%v)", status.err)
 	default:
-		return fmt.Sprintf("??? (%v)", err)
+		return fmt.Sprintf("??? (%v)", status.err)
 	}
 }
 
@@ -382,7 +439,7 @@ func (p *TaskProcess) Stop(done chan error) error {
 	select {
 	case err := <-done:
 		fmt.Println("Process exited gracefully:", err)
-		p.status.Set(ProcessStatusStopped, err)
+		p.status.SetExited(ProcessStatusStopped, true, err, config.ExpectedExitCodes)
 		return err
 
 	case <-time.After(time.Duration(config.SecondsAfterStopRequestBeforeProgramKill) * time.Second):
@@ -439,7 +496,7 @@ func (p *TaskProcess) Run(ctx context.Context) error {
 		// Process startup
 		select {
 		case err := <-doneCh:
-			p.status.Set(ProcessStatusStopped, err)
+			p.status.SetExited(ProcessStatusStopped, false, err, config.ExpectedExitCodes)
 			fmt.Println("Process exited early:", err)
 
 		case request := <-p.commandQueue:
@@ -466,7 +523,7 @@ func (p *TaskProcess) Run(ctx context.Context) error {
 
 			select {
 			case err := <-doneCh:
-				p.status.Set(ProcessStatusStopped, err)
+				p.status.SetExited(ProcessStatusStopped, false, err, config.ExpectedExitCodes)
 				fmt.Println("Process exited:", err)
 
 			case request := <-p.commandQueue:
@@ -486,7 +543,10 @@ func (p *TaskProcess) Run(ctx context.Context) error {
 
 		config = p.getConfig()
 
-		if config.AutoRestart == AutoRestartAlways && numAutoRestarts < config.MaxAutoRestarts {
+		allStatus := p.status.GetAll()
+		stoppedByUser := allStatus.value == ProcessStatusStopped && !allStatus.byUser
+
+		if stoppedByUser && (config.AutoRestart == AutoRestartAlways || (config.AutoRestart == AutoRestartUnexpected && !allStatus.expectedExit)) && numAutoRestarts < config.MaxAutoRestarts {
 			numAutoRestarts += 1
 			continue
 		}
