@@ -168,6 +168,10 @@ type Supervisor struct {
 	config    Config
 }
 
+func (s *Supervisor) Init(config Config) {
+	s.config = config
+}
+
 func (s *Supervisor) getTaskConfig(name string) *TaskConfig {
 	idx := slices.IndexFunc(s.config.tasks, func(t TaskConfig) bool { return t.Name == name })
 	if idx < 0 {

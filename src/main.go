@@ -18,9 +18,8 @@ func main() {
 	}
 
 	var supervisor Supervisor
+	supervisor.Init(config)
 	defer supervisor.DestroyAllTasks()
-
-	supervisor.config = config
 
 	var shell Shell
 	shell.supervisor = &supervisor
