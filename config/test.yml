@@ -8,6 +8,15 @@ programs:
       NAME: "Hello"
       VALUE: 1
       OCCUPATION: unemployed
+      VARIABLE: $PATH
+      NEWLINES: "some\nnewlines"
   working_dir:
     cmd: "../tests/working_dir"
     workingdir: "./config"
+  infinite:
+    cmd: "./tests/infinite"
+    numprocs: 5
+  long_shutdown:
+    cmd: "./tests/long_shutdown"
+    stopsignal: USR1
+    stoptime: 1

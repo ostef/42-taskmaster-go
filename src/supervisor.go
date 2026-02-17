@@ -7,6 +7,7 @@ import (
 	"os/exec"
 	"slices"
 	"sync"
+	"syscall"
 	"time"
 )
 
@@ -209,6 +210,27 @@ func (s *Supervisor) RestartTask(name string) error {
 	return nil
 }
 
+func (s *Supervisor) DestroyTask(name string) error {
+	task_idx := slices.IndexFunc(s.tasks, func(t *Task) bool { return t.name == name })
+	if task_idx < 0 {
+		return fmt.Errorf("No tasked named '%v'", name)
+	}
+
+	task := s.tasks[task_idx]
+
+	for i, process := range task.processes {
+		process.commandQueue <- ProcessCommandDestroy
+		task.processes[i] = nil
+	}
+
+	task.processes = nil
+	s.tasks[task_idx] = nil
+
+	s.tasks = append(s.tasks[:task_idx], s.tasks[task_idx+1:]...)
+
+	return nil
+}
+
 func (s *Supervisor) DestroyAllTasks() error {
 	for _, task := range s.tasks {
 		for _, process := range task.processes {
@@ -243,14 +265,80 @@ func (s *Supervisor) PrintStatus() {
 	}
 }
 
+func (s *Supervisor) UpdateTaskConfig(name string) {
+	fmt.Printf("Updating task config for '%v'\n", name)
+
+	config := s.getTaskConfig(name)
+	if config == nil {
+		fmt.Printf("Task '%v' has been removed from config. Destroying...\n", name)
+		s.DestroyTask(name)
+	} else {
+		task := s.getTask(name)
+		if task != nil {
+			// Update each running process' config
+			for _, process := range task.processes {
+				process.setConfig(*config)
+			}
+
+			numNewProcessesToSpawn := config.NumProcesses - len(task.processes)
+			numProcessesToDestroy := -numNewProcessesToSpawn
+
+			if numNewProcessesToSpawn > 0 {
+				fmt.Printf("Task '%v' exists and has %v processe(s) running. Spawning %v new processe(s)\n", name, len(task.processes), numNewProcessesToSpawn)
+			} else if numProcessesToDestroy > 0 {
+				fmt.Printf("Task '%v' exists and has %v processe(s) running. Destroying %v processe(s)\n", name, len(task.processes), numProcessesToDestroy)
+			}
+
+			// Spawn new processes if necessary
+			for range numNewProcessesToSpawn {
+				process := new(TaskProcess)
+				task.processes = append(task.processes, process)
+
+				process.config = *config
+				process.commandQueue = make(chan ProcessCommand, 3)
+
+				s.waitGroup.Go(func() { process.Run(context.Background()) })
+			}
+
+			// Destroy processes if necessary
+			for range numProcessesToDestroy {
+				index := len(task.processes) - 1
+
+				process := task.processes[index]
+				process.setConfig(*config)
+				process.commandQueue <- ProcessCommandDestroy
+
+				task.processes[index] = nil
+				task.processes = task.processes[:index]
+			}
+		}
+	}
+}
+
 func (s *Supervisor) ReloadConfig() error {
+	fmt.Printf("Reloading config from file '%v'\n", s.config.filename)
+
 	cfg, err := ParseConfig(s.config.filename)
 	if err != nil {
+		fmt.Println(err)
 		return err
 	}
 
+	oldcfg := s.config
 	s.config = cfg
-	// @Todo: stop tasks that have been removed, update task num processes, ...
+
+	// Update tasks that were removed from the config file
+	for _, taskConfig := range oldcfg.tasks {
+		current := s.getTaskConfig(taskConfig.Name)
+
+		if current == nil {
+			s.UpdateTaskConfig(taskConfig.Name)
+		}
+	}
+
+	for _, taskConfig := range s.config.tasks {
+		s.UpdateTaskConfig(taskConfig.Name)
+	}
 
 	return nil
 }
@@ -298,6 +386,8 @@ func (p *TaskProcess) Run(ctx context.Context) error {
 			p.cmd.Env = append(p.cmd.Env, fmt.Sprintf("%v=%v", name, val))
 		}
 
+		oldmask := syscall.Umask(int(config.Umask))
+
 		err := p.cmd.Start()
 		if err != nil {
 			fmt.Println("Could not start process:", err)
@@ -305,6 +395,8 @@ func (p *TaskProcess) Run(ctx context.Context) error {
 
 			return err
 		}
+
+		syscall.Umask(oldmask)
 
 		p.status.Set(ProcessStatusStarted, nil)
 

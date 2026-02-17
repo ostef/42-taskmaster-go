@@ -5,3 +5,4 @@
 * Handle umask
 * Handle stdout and stderr
 * Logging
+* Make sure the config field on each task's process is updated regularly
