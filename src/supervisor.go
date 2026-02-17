@@ -100,6 +100,9 @@ func (p *TaskProcess) setConfig(cfg TaskConfig) {
 type Task struct {
 	name      string
 	processes []*TaskProcess
+	// Represents what the user intended, so we know whether we
+	// should spawn new processes when e.g. reloading the config
+	shouldRun bool
 }
 
 type Supervisor struct {
@@ -140,6 +143,8 @@ func (s *Supervisor) StartTask(name string) error {
 		task.name = name
 	}
 
+	task.shouldRun = true
+
 	for _, process := range task.processes {
 		status, _ := process.status.Get()
 		if status == ProcessStatusStarted || status == ProcessStatusRunning || status == ProcessStatusStopping {
@@ -178,6 +183,8 @@ func (s *Supervisor) StopTask(name string) error {
 		return fmt.Errorf("No task named '%v'", name)
 	}
 
+	task.shouldRun = false
+
 	for _, process := range task.processes {
 		process.commandQueue <- ProcessCommandStop
 	}
@@ -195,6 +202,8 @@ func (s *Supervisor) RestartTask(name string) error {
 	if config == nil {
 		return fmt.Errorf("No task named '%v'", name)
 	}
+
+	task.shouldRun = true
 
 	for _, process := range task.processes {
 		status, _ := process.status.Get()
@@ -218,6 +227,8 @@ func (s *Supervisor) DestroyTask(name string) error {
 
 	task := s.tasks[task_idx]
 
+	task.shouldRun = false
+
 	for i, process := range task.processes {
 		process.commandQueue <- ProcessCommandDestroy
 		task.processes[i] = nil
@@ -233,6 +244,8 @@ func (s *Supervisor) DestroyTask(name string) error {
 
 func (s *Supervisor) DestroyAllTasks() error {
 	for _, task := range s.tasks {
+		task.shouldRun = false
+
 		for _, process := range task.processes {
 			process.commandQueue <- ProcessCommandDestroy
 		}
@@ -282,6 +295,10 @@ func (s *Supervisor) UpdateTaskConfig(name string) {
 
 			numNewProcessesToSpawn := config.NumProcesses - len(task.processes)
 			numProcessesToDestroy := -numNewProcessesToSpawn
+
+			if !task.shouldRun {
+				numNewProcessesToSpawn = 0
+			}
 
 			if numNewProcessesToSpawn > 0 {
 				fmt.Printf("Task '%v' exists and has %v process(es) running. Spawning %v new process(es)\n", name, len(task.processes), numNewProcessesToSpawn)
