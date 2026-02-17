@@ -349,6 +349,7 @@ func (p *TaskProcess) Stop(done chan error) error {
 	config := p.getConfig()
 
 	_ = p.cmd.Process.Signal(config.StopSignal)
+	p.status.Set(ProcessStatusStopping, nil)
 
 	select {
 	case err := <-done:
