@@ -284,9 +284,9 @@ func (s *Supervisor) UpdateTaskConfig(name string) {
 			numProcessesToDestroy := -numNewProcessesToSpawn
 
 			if numNewProcessesToSpawn > 0 {
-				fmt.Printf("Task '%v' exists and has %v processe(s) running. Spawning %v new processe(s)\n", name, len(task.processes), numNewProcessesToSpawn)
+				fmt.Printf("Task '%v' exists and has %v process(es) running. Spawning %v new process(es)\n", name, len(task.processes), numNewProcessesToSpawn)
 			} else if numProcessesToDestroy > 0 {
-				fmt.Printf("Task '%v' exists and has %v processe(s) running. Destroying %v processe(s)\n", name, len(task.processes), numProcessesToDestroy)
+				fmt.Printf("Task '%v' exists and has %v process(es) running. Destroying %v process(es)\n", name, len(task.processes), numProcessesToDestroy)
 			}
 
 			// Spawn new processes if necessary
