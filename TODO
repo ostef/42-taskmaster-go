@@ -4,3 +4,30 @@
 * Handle stdout and stderr
 * Logging
 * Allow processes to be removed from the Task.processes array only when they have fully exited their loop (otherwise in certain circumstances like reloading like reloading the config we can't see their status if they don't shutdown gracefully for example)
+* Make the status command also print the config file
+
+## Subject checklist
+* [ ] The configuration must be loaded at launch, and must be reloadable, while taskmaster is running, by sending a SIGHUP to it
+* [ ] Your program must have a logging system that logs events to a local file (When a program is started, stopped, restarted, when it dies unexpectedly, when the configuration is reloaded, etc ...)
+* [x] The shell must be at the very least usable (Line editing, history... completion would also be nice)
+
+This shell must at least allow the user to:
+* [x] See the status of all the programs described in the config file ("status" command)
+* [x] Start / stop / restart programs
+* [x] Reload the configuration file without stopping the main program
+* [x] Stop the main program
+
+The configuration file must allow the user to specify the following, for each program that is to be supervised:
+* [?] The command to use to launch the program
+* [x] The number of processes to start and keep running
+* [ ] Whether to start this program at launch or not
+* [x] Whether the program should be restarted always, never, or on unexpected exits only
+* [x] Which return codes represent an "expected" exit status
+* [ ] How long the program should be running after it’s started for it to be considered "successfully started"
+* [x] How many times a restart should be attempted before aborting
+* [x] Which signal should be used to stop (i.e. exit gracefully) the program
+* [x] How long to wait after a graceful stop before killing the program
+* [ ] Options to discard the program’s stdout/stderr or to redirect them to files
+* [x] Environment variables to set before launching the program
+* [x] A working directory to set before launching the program
+* [?] An umask to set before launching the program
