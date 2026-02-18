@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log"
 	"os"
 	"os/exec"
 	"slices"
@@ -136,6 +137,7 @@ type TaskProcess struct {
 	commandQueue chan ProcessCommand
 	config       TaskConfig
 	configMutex  sync.RWMutex
+	logger       *log.Logger
 }
 
 func (p *TaskProcess) getConfig() TaskConfig {
@@ -166,10 +168,14 @@ type Supervisor struct {
 	waitGroup sync.WaitGroup
 	tasks     []*Task
 	config    Config
+	logger    *log.Logger
+	logFile   *os.File
 }
 
-func (s *Supervisor) Init(config Config) {
+func (s *Supervisor) Init(config Config, f *os.File) {
 	s.config = config
+	s.logFile = f
+	s.logger = log.New(f, "[taskmaster] ", log.LstdFlags)
 }
 
 func (s *Supervisor) getTaskConfig(name string) *TaskConfig {
@@ -190,12 +196,17 @@ func (s *Supervisor) getTask(name string) *Task {
 	return s.tasks[idx]
 }
 
+func (s *Supervisor) loggerErrorf(format string, args ...any) error {
+	s.logger.Printf(format, args...)
+	return fmt.Errorf(format, args...)
+}
+
 func (s *Supervisor) StartTask(name string) error {
 	config := s.getTaskConfig(name)
 	if config == nil {
-		return fmt.Errorf("No task named '%v'", name)
+		return s.loggerErrorf("No task named '%v'", name)
 	}
-
+	s.logger.Printf("Starting task '%s'", name)
 	task := s.getTask(name)
 	if task == nil {
 		task = new(Task)
@@ -209,7 +220,7 @@ func (s *Supervisor) StartTask(name string) error {
 	for _, process := range task.processes {
 		status, _ := process.status.Get()
 		if status == ProcessStatusStarted || status == ProcessStatusRunning || status == ProcessStatusStopping {
-			return fmt.Errorf("Task '%v' still has some running processes", name)
+			return s.loggerErrorf("Task '%v' still has some running processes", name)
 		}
 	}
 
@@ -231,6 +242,7 @@ func (s *Supervisor) StartTask(name string) error {
 
 		process.setConfig(*config)
 		process.commandQueue = make(chan ProcessCommand, 3)
+		process.logger = s.logger
 
 		s.waitGroup.Go(func() { process.Run(context.Background()) })
 	}
@@ -241,9 +253,10 @@ func (s *Supervisor) StartTask(name string) error {
 func (s *Supervisor) StopTask(name string) error {
 	task := s.getTask(name)
 	if task == nil {
-		return fmt.Errorf("No task named '%v'", name)
+		return s.loggerErrorf("No task named '%v'", name)
 	}
 
+	s.logger.Printf("Stopping task '%s'", name)
 	task.shouldRun = false
 
 	for _, process := range task.processes {
@@ -261,9 +274,10 @@ func (s *Supervisor) RestartTask(name string) error {
 
 	config := s.getTaskConfig(name)
 	if config == nil {
-		return fmt.Errorf("No task named '%v'", name)
+		return s.loggerErrorf("No task named '%v'", name)
 	}
 
+	s.logger.Printf("Restarting task '%s'", name)
 	task.shouldRun = true
 
 	for _, process := range task.processes {
@@ -284,6 +298,7 @@ func (s *Supervisor) RestartTask(name string) error {
 
 		process.setConfig(*config)
 		process.commandQueue = make(chan ProcessCommand, 3)
+		process.logger = s.logger
 
 		s.waitGroup.Go(func() { process.Run(context.Background()) })
 	}
@@ -294,11 +309,12 @@ func (s *Supervisor) RestartTask(name string) error {
 func (s *Supervisor) DestroyTask(name string) error {
 	task_idx := slices.IndexFunc(s.tasks, func(t *Task) bool { return t.name == name })
 	if task_idx < 0 {
-		return fmt.Errorf("No tasked named '%v'", name)
+		return s.loggerErrorf("No tasked named '%v'", name)
 	}
 
 	task := s.tasks[task_idx]
 
+	s.logger.Printf("Destroying task '%s'", name)
 	task.shouldRun = false
 
 	for i, process := range task.processes {
@@ -315,6 +331,7 @@ func (s *Supervisor) DestroyTask(name string) error {
 }
 
 func (s *Supervisor) DestroyAllTasks() error {
+	s.logger.Printf("Destroying all tasks")
 	for _, task := range s.tasks {
 		task.shouldRun = false
 
@@ -326,6 +343,7 @@ func (s *Supervisor) DestroyAllTasks() error {
 	s.waitGroup.Wait()
 
 	s.tasks = nil
+	s.logFile.Close()
 
 	return nil
 }
@@ -351,11 +369,10 @@ func (s *Supervisor) PrintStatus() {
 }
 
 func (s *Supervisor) UpdateTaskConfig(name string) {
-	fmt.Printf("Updating task config for '%v'\n", name)
-
+	s.logger.Printf("Updating task config for '%s'", name)
 	config := s.getTaskConfig(name)
 	if config == nil {
-		fmt.Printf("Task '%v' has been removed from config. Destroying...\n", name)
+		s.logger.Printf("Task '%s' removed from config, destroying", name)
 		s.DestroyTask(name)
 	} else {
 		task := s.getTask(name)
@@ -373,9 +390,9 @@ func (s *Supervisor) UpdateTaskConfig(name string) {
 			}
 
 			if numNewProcessesToSpawn > 0 {
-				fmt.Printf("Task '%v' exists and has %v process(es) running. Spawning %v new process(es)\n", name, len(task.processes), numNewProcessesToSpawn)
+				s.logger.Printf("Task '%v' exists and has %v process(es) running. Spawning %v new process(es)\n", name, len(task.processes), numNewProcessesToSpawn)
 			} else if numProcessesToDestroy > 0 {
-				fmt.Printf("Task '%v' exists and has %v process(es) running. Destroying %v process(es)\n", name, len(task.processes), numProcessesToDestroy)
+				s.logger.Printf("Task '%v' exists and has %v process(es) running. Destroying %v process(es)\n", name, len(task.processes), numProcessesToDestroy)
 			}
 
 			// Spawn new processes if necessary
@@ -385,6 +402,7 @@ func (s *Supervisor) UpdateTaskConfig(name string) {
 
 				process.setConfig(*config)
 				process.commandQueue = make(chan ProcessCommand, 3)
+				process.logger = s.logger
 
 				s.waitGroup.Go(func() { process.Run(context.Background()) })
 			}
@@ -405,8 +423,7 @@ func (s *Supervisor) UpdateTaskConfig(name string) {
 }
 
 func (s *Supervisor) ReloadConfig() error {
-	fmt.Printf("Reloading config from file '%v'\n", s.config.filename)
-
+	s.logger.Printf("Reloading config from '%s'", s.config.filename)
 	cfg, err := ParseConfig(s.config.filename)
 	if err != nil {
 		fmt.Println(err)
@@ -429,11 +446,13 @@ func (s *Supervisor) ReloadConfig() error {
 		s.UpdateTaskConfig(taskConfig.Name)
 	}
 
+	s.logger.Printf("Config reloaded successfully")
+
 	return nil
 }
 
 func (p *TaskProcess) Stop(done chan error) error {
-	fmt.Println("Shutting down process...")
+	p.logger.Println("Shutting down process...")
 
 	config := p.getConfig()
 
@@ -442,15 +461,15 @@ func (p *TaskProcess) Stop(done chan error) error {
 
 	select {
 	case err := <-done:
-		fmt.Println("Process exited gracefully:", err)
+		p.logger.Println("Process exited gracefully:", err)
 		p.status.SetExited(ProcessStatusStopped, true, err, config.ExpectedExitCodes)
 		return err
 
 	case <-time.After(time.Duration(config.SecondsAfterStopRequestBeforeProgramKill) * time.Second):
-		fmt.Println("Process still exiting, sending SIGKILL...")
+		p.logger.Println("Process still exiting, sending SIGKILL...")
 		_ = p.cmd.Process.Kill()
 		err := <-done
-		fmt.Println("Process killed:", err)
+		p.logger.Println("Process killed:", err)
 		p.status.Set(ProcessStatusKilled, err)
 
 		return err
@@ -462,8 +481,7 @@ func (p *TaskProcess) Run(ctx context.Context) error {
 	for true {
 		config := p.getConfig()
 
-		fmt.Printf("Starting process for %v\n", config.Name)
-
+		p.logger.Printf("Starting process for '%s'", config.Name)
 		p.cmd = exec.CommandContext(context.Background(), config.Command, config.Args...)
 		p.cmd.Stdout = os.Stdout
 		p.cmd.Stderr = os.Stderr
@@ -480,7 +498,7 @@ func (p *TaskProcess) Run(ctx context.Context) error {
 
 		err := p.cmd.Start()
 		if err != nil {
-			fmt.Println("Could not start process:", err)
+			p.logger.Println("Could not start process:", err)
 			p.status.Set(ProcessStatusError, err)
 
 			return err
@@ -501,7 +519,7 @@ func (p *TaskProcess) Run(ctx context.Context) error {
 		select {
 		case err := <-doneCh:
 			p.status.SetExited(ProcessStatusStopped, false, err, config.ExpectedExitCodes)
-			fmt.Println("Process exited early:", err)
+			p.logger.Println("Process exited early:", err)
 
 		case request := <-p.commandQueue:
 			switch request {
@@ -518,7 +536,7 @@ func (p *TaskProcess) Run(ctx context.Context) error {
 
 		case <-time.After(time.Duration(config.StartupTimeInSeconds) * time.Second):
 			p.status.Set(ProcessStatusRunning, nil)
-			fmt.Println("Process has sucessfully started")
+			p.logger.Println("Process has sucessfully started")
 		}
 
 		status, _ := p.status.Get()
@@ -528,7 +546,7 @@ func (p *TaskProcess) Run(ctx context.Context) error {
 			select {
 			case err := <-doneCh:
 				p.status.SetExited(ProcessStatusStopped, false, err, config.ExpectedExitCodes)
-				fmt.Println("Process exited:", err)
+				p.logger.Println("Process exited:", err)
 
 			case request := <-p.commandQueue:
 				switch request {
@@ -552,6 +570,7 @@ func (p *TaskProcess) Run(ctx context.Context) error {
 
 		if stoppedByUser && (config.AutoRestart == AutoRestartAlways || (config.AutoRestart == AutoRestartUnexpected && !allStatus.expectedExit)) && numAutoRestarts < config.MaxAutoRestarts {
 			numAutoRestarts += 1
+			p.logger.Printf("Auto-restarting '%s' (attempt %d/%d)", config.Name, numAutoRestarts, config.MaxAutoRestarts)
 			continue
 		}
 
