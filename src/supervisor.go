@@ -461,8 +461,8 @@ func (s *Supervisor) PrintConfig() {
 
 		fmt.Printf("  stopsignal: %v\n", signalToString(taskCfg.StopSignal))
 
-		if taskCfg.SecondsAfterStopRequestBeforeProgramKill > 0 {
-			fmt.Printf("  stoptime: %v second(s)\n", taskCfg.SecondsAfterStopRequestBeforeProgramKill)
+		if taskCfg.SecondsAfterStopRequestBeforeProcessKill > 0 {
+			fmt.Printf("  stoptime: %v second(s)\n", taskCfg.SecondsAfterStopRequestBeforeProcessKill)
 		}
 
 		fmt.Printf("  umask: 0%03o\n", taskCfg.Umask)
@@ -642,7 +642,7 @@ func (p *TaskProcess) Stop(done chan error) error {
 		p.status.SetExited(ProcessStatusStopped, true, err, config.ExpectedExitCodes)
 		return err
 
-	case <-time.After(time.Duration(config.SecondsAfterStopRequestBeforeProgramKill) * time.Second):
+	case <-time.After(time.Duration(config.SecondsAfterStopRequestBeforeProcessKill) * time.Second):
 		p.logger.Printf("Task '%v': process still exiting, sending SIGKILL...", p.taskName)
 		_ = p.cmd.Process.Kill()
 		err := <-done

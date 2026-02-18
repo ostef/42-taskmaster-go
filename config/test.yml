@@ -16,7 +16,7 @@
 # [ ] stderr
 # [x] env
 
-programs:
+tasks:
   non_zero_exit_code:
     cmd: "./tests/non_zero_exit_code"
     exitcodes: [10]

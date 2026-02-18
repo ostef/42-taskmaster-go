@@ -36,7 +36,7 @@ type RawTask struct {
 }
 
 type RawConfig struct {
-	Programs map[string]RawTask `yaml:"programs"`
+	Tasks map[string]RawTask `yaml:"tasks"`
 }
 
 type TaskConfig struct {
@@ -55,7 +55,7 @@ type TaskConfig struct {
 	MaxAutoRestarts                          int
 	ExpectedExitCodes                        []int
 	StopSignal                               syscall.Signal
-	SecondsAfterStopRequestBeforeProgramKill float64
+	SecondsAfterStopRequestBeforeProcessKill float64
 	Umask                                    uint32
 }
 
@@ -100,10 +100,12 @@ func parseSignal(str string) (syscall.Signal, error) {
 		"ABRT": syscall.SIGABRT,
 		"FPE":  syscall.SIGFPE,
 	}
+
 	sig, ok := signals[str]
 	if !ok {
 		return 0, fmt.Errorf("unknown signal: %s", str)
 	}
+
 	return sig, nil
 }
 
@@ -136,6 +138,7 @@ func checkExitCode(code int) error {
 	if code < 0 || code > 255 {
 		return fmt.Errorf("exit code out of range [0-255]: %d", code)
 	}
+
 	return nil
 }
 
@@ -143,12 +146,15 @@ func parseExitCodes(exitCodes any) ([]int, error) {
 	switch value := exitCodes.(type) {
 	case nil:
 		return []int{0}, nil
+
 	case int:
 		err := checkExitCode(value)
 		if err != nil {
 			return nil, err
 		}
+
 		return []int{value}, nil
+
 	case []any:
 		codes := make([]int, 0, len(value))
 		for _, code := range value {
@@ -156,33 +162,37 @@ func parseExitCodes(exitCodes any) ([]int, error) {
 			if !ok {
 				return nil, fmt.Errorf("invalid exit code: %v", code)
 			}
+
 			err := checkExitCode(number)
 			if err != nil {
 				return nil, err
 			}
+
 			codes = append(codes, number)
 		}
+
 		return codes, nil
+
 	default:
 		return nil, fmt.Errorf("invalid exit code")
 	}
 }
 
-func validateTask(task TaskConfig, programName string) error {
+func validateTask(task TaskConfig, taskName string) error {
 	if task.NumProcesses < 1 {
-		return fmt.Errorf("program %s: numprocs must be >= 1, got %d", programName, task.NumProcesses)
+		return fmt.Errorf("task %s: numprocs must be >= 1, got %d", taskName, task.NumProcesses)
 	}
 	if task.SecondsToWaitBeforeAutoStart < 0 {
-		return fmt.Errorf("program %s: starttime must be >= 0, got %v", programName, task.SecondsToWaitBeforeAutoStart)
+		return fmt.Errorf("task %s: starttime must be >= 0, got %v", taskName, task.SecondsToWaitBeforeAutoStart)
 	}
 	if task.MaxAutoRestarts < 0 {
-		return fmt.Errorf("program %s: autorestarttries must be >= 0, got %d", programName, task.MaxAutoRestarts)
+		return fmt.Errorf("task %s: autorestarttries must be >= 0, got %d", taskName, task.MaxAutoRestarts)
 	}
-	if task.SecondsAfterStopRequestBeforeProgramKill < 0 {
-		return fmt.Errorf("program %s: stoptime must be >= 0, got %v", programName, task.SecondsAfterStopRequestBeforeProgramKill)
+	if task.SecondsAfterStopRequestBeforeProcessKill < 0 {
+		return fmt.Errorf("task %s: stoptime must be >= 0, got %v", taskName, task.SecondsAfterStopRequestBeforeProcessKill)
 	}
 	if task.Umask > 0777 {
-		return fmt.Errorf("program %s: umask must be <= 0777, got %o", programName, task.Umask)
+		return fmt.Errorf("task %s: umask must be <= 0777, got %o", taskName, task.Umask)
 	}
 
 	return nil
@@ -203,27 +213,27 @@ func ParseConfig(file_path string) (Config, error) {
 
 	config := Config{filename: file_path}
 
-	for name, tasks := range raw.Programs {
+	for name, tasks := range raw.Tasks {
 		if tasks.Cmd == "" {
-			return Config{}, fmt.Errorf("program %s: cmd is required", name)
+			return Config{}, fmt.Errorf("task %s: cmd is required", name)
 		}
 
 		autoRestart, err := parseAutoRestart(tasks.AutoRestart)
 		if err != nil {
-			return Config{}, fmt.Errorf("program %s, autorestart error:  %w", name, err)
+			return Config{}, fmt.Errorf("task %s, autorestart error:  %w", name, err)
 		}
 
 		stopSignal := syscall.SIGTERM
 		if tasks.StopSignal != "" {
 			stopSignal, err = parseSignal(tasks.StopSignal)
 			if err != nil {
-				return Config{}, fmt.Errorf("program %s, stopsignal error: %w", name, err)
+				return Config{}, fmt.Errorf("task %s, stopsignal error: %w", name, err)
 			}
 		}
 
 		exitCodes, err := parseExitCodes(tasks.ExitCodes)
 		if err != nil {
-			return Config{}, fmt.Errorf("program %s, exit code error: %w", name, err)
+			return Config{}, fmt.Errorf("task %s, exit code error: %w", name, err)
 		}
 
 		task := TaskConfig{
@@ -243,14 +253,16 @@ func ParseConfig(file_path string) (Config, error) {
 			ExpectedExitCodes:                        exitCodes,
 			StopSignal:                               stopSignal,
 			Umask:                                    setDefaultValueIfNull(tasks.Umask, uint32(defaultUmask)),
-			SecondsAfterStopRequestBeforeProgramKill: setDefaultValueIfNull(tasks.StopTime, 5),
+			SecondsAfterStopRequestBeforeProcessKill: setDefaultValueIfNull(tasks.StopTime, 5),
 		}
 
 		err = validateTask(task, name)
 		if err != nil {
 			return Config{}, err
 		}
+
 		config.tasks = append(config.tasks, task)
 	}
+
 	return config, nil
 }
