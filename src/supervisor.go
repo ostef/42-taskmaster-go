@@ -204,6 +204,10 @@ func (s *Supervisor) Init(config Config, f *os.File) {
 	s.logger = log.New(f, "[taskmaster] ", log.LstdFlags)
 }
 
+func (s *Supervisor) Cleanup() {
+	s.logFile.Close()
+}
+
 func (s *Supervisor) getTaskConfig(name string) *TaskConfig {
 	idx := slices.IndexFunc(s.config.tasks, func(t TaskConfig) bool { return t.Name == name })
 	if idx < 0 {
@@ -358,6 +362,7 @@ func (s *Supervisor) DestroyTask(name string) error {
 
 func (s *Supervisor) DestroyAllTasks() error {
 	s.logger.Printf("Destroying all tasks")
+
 	for _, task := range s.tasks {
 		task.shouldRun = false
 
@@ -369,7 +374,6 @@ func (s *Supervisor) DestroyAllTasks() error {
 	s.waitGroup.Wait()
 
 	s.tasks = nil
-	s.logFile.Close()
 
 	return nil
 }

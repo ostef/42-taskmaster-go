@@ -19,16 +19,19 @@ func main() {
 	}
 
 	current_time := time.Now().Local()
-	filename := current_time.Format("log_2006-01-02_15-04-05.txt")
+	filename := current_time.Format("logs/log_2006-01-02_15-04-05.txt")
+
+	os.Mkdir("logs", 0777)
 	f, err := os.Create(filename)
 	if err != nil {
 		fmt.Println(err)
 		return
 	}
+
 	var supervisor Supervisor
-	defer supervisor.DestroyAllTasks()
 
 	supervisor.Init(config, f)
+	defer supervisor.Cleanup()
 
 	var shell Shell
 	shell.Init(&supervisor)
