@@ -38,6 +38,7 @@ func main() {
 
 	go shell.Loop()
 
+	supervisor.DoAutoStart()
 	supervisor.Loop()
 
 	<-shell.closed

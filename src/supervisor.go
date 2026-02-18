@@ -208,6 +208,17 @@ func (s *Supervisor) Cleanup() {
 	s.logFile.Close()
 }
 
+func (s *Supervisor) DoAutoStart() {
+	for _, task := range s.config.tasks {
+		if task.AutoStart {
+			go func() {
+				time.Sleep(time.Duration(task.SecondsToWaitBeforeAutoStart) * time.Second)
+				s.commandQueue <- SupervisorCommand{Kind: SupervisorStartTask, TaskName: task.Name}
+			}()
+		}
+	}
+}
+
 func (s *Supervisor) getTaskConfig(name string) *TaskConfig {
 	idx := slices.IndexFunc(s.config.tasks, func(t TaskConfig) bool { return t.Name == name })
 	if idx < 0 {

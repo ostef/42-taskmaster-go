@@ -43,7 +43,17 @@ programs:
   umask_test:
     cmd: "./tests/umask_test"
     umask: 0777
-
   umask_test2:
     cmd: "./tests/umask_test"
     umask: 0444
+  autostart:
+    cmd: "./tests/print_env"
+    env:
+      HELLO: "World"
+    autostart: true
+  autostartafter10:
+    cmd: "./tests/print_env"
+    env:
+      HELLO: "World"
+    autostart: true
+    autostarttime: 10
