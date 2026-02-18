@@ -135,6 +135,7 @@ const (
 
 type TaskProcess struct {
 	taskName     string
+	supervisor   *Supervisor
 	status       ProcessStatus
 	cmd          *exec.Cmd
 	commandQueue chan ProcessCommand
@@ -168,14 +169,15 @@ type Task struct {
 }
 
 type Supervisor struct {
-	waitGroup    sync.WaitGroup
-	tasks        []*Task
-	config       Config
-	isRunning    bool
-	commandQueue chan SupervisorCommand
-	sigChan      chan os.Signal
-	logger       *log.Logger
-	logFile      *os.File
+	waitGroup         sync.WaitGroup
+	tasks             []*Task
+	config            Config
+	isRunning         bool
+	commandQueue      chan SupervisorCommand
+	sigChan           chan os.Signal
+	logger            *log.Logger
+	logFile           *os.File
+	fileCreationMutex sync.RWMutex
 }
 
 const (
@@ -284,6 +286,7 @@ func (s *Supervisor) StartTask(name string) error {
 	numNewProcessesToSpawn := config.NumProcesses - len(task.processes)
 	for range numNewProcessesToSpawn {
 		process := new(TaskProcess)
+		process.supervisor = s
 		process.taskName = task.name
 		task.processes = append(task.processes, process)
 
@@ -341,6 +344,7 @@ func (s *Supervisor) RestartTask(name string) error {
 	numNewProcessesToSpawn := config.NumProcesses - len(task.processes)
 	for range numNewProcessesToSpawn {
 		process := new(TaskProcess)
+		process.supervisor = s
 		process.taskName = task.name
 		task.processes = append(task.processes, process)
 
@@ -515,6 +519,7 @@ func (s *Supervisor) UpdateTaskConfig(name string) {
 			// Spawn new processes if necessary
 			for range numNewProcessesToSpawn {
 				process := new(TaskProcess)
+				process.supervisor = s
 				process.taskName = task.name
 				task.processes = append(task.processes, process)
 
@@ -666,17 +671,27 @@ func (p *TaskProcess) Run(ctx context.Context) error {
 			p.cmd.Env = append(p.cmd.Env, fmt.Sprintf("%v=%v", name, val))
 		}
 
-		oldmask := syscall.Umask(int(config.Umask))
+		err := func() error {
+			p.supervisor.fileCreationMutex.Lock()
+			defer p.supervisor.fileCreationMutex.Unlock()
 
-		err := p.cmd.Start()
+			oldmask := syscall.Umask(int(config.Umask))
+			defer syscall.Umask(oldmask)
+
+			err := p.cmd.Start()
+			if err != nil {
+				p.logger.Printf("Task '%v': could not start process: %v", p.taskName, err)
+				p.status.Set(ProcessStatusError, err)
+
+				return err
+			}
+
+			return nil
+		}()
+
 		if err != nil {
-			p.logger.Printf("Task '%v': could not start process: %v", p.taskName, err)
-			p.status.Set(ProcessStatusError, err)
-
 			return err
 		}
-
-		syscall.Umask(oldmask)
 
 		p.status.Set(ProcessStatusStarted, nil)
 
