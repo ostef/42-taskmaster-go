@@ -167,8 +167,8 @@ func validateTask(task TaskConfig, taskName string) error {
 	if task.SecondsToWaitBeforeAutoStart < 0 {
 		return fmt.Errorf("task %v: starttime must be >= 0, got %v", taskName, task.SecondsToWaitBeforeAutoStart)
 	}
-	if task.MaxAutoRestarts < 0 {
-		return fmt.Errorf("task %v: autorestarttries must be >= 0, got %v", taskName, task.MaxAutoRestarts)
+	if task.MaxAutoRestarts <= 0 {
+		return fmt.Errorf("task %v: autorestarttries must be > 0, got %v", taskName, task.MaxAutoRestarts)
 	}
 	if task.SecondsAfterStopRequestBeforeProcessKill < 0 {
 		return fmt.Errorf("task %v: stoptime must be >= 0, got %v", taskName, task.SecondsAfterStopRequestBeforeProcessKill)

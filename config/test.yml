@@ -31,6 +31,11 @@ tasks:
   print_args:
     cmd: "./tests/print_args"
     args: [a, b, abc def, 110]
+  autorestart:
+    cmd: "./tests/print_args"
+    args: ["should be printed 3 times"]
+    autorestart: always
+    autorestarttries: 2
   working_dir:
     cmd: "../tests/working_dir"
     workingdir: "./config"
