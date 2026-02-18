@@ -475,7 +475,11 @@ func (s *Supervisor) PrintStatus() {
 		return
 	}
 
-	for _, task := range s.tasks {
+	for i, task := range s.tasks {
+		if i > 0 {
+			fmt.Printf("\n")
+		}
+
 		fmt.Printf("Task '%v', ", task.name)
 
 		if len(task.processes) > 0 {

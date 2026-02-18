@@ -12,7 +12,49 @@ type Shell struct {
 	closed     chan bool
 }
 
-var commands = []string{"start", "stop", "restart", "reload", "status", "config", "exit", "help"}
+type ShellCommand struct {
+	Name        string
+	Args        []string
+	Description string
+}
+
+var shell_commands = []ShellCommand{
+	{
+		Name:        "help",
+		Description: "List all commands",
+	},
+	{
+		Name:        "start",
+		Args:        []string{"task_name"},
+		Description: "Start a non running task",
+	},
+	{
+		Name:        "stop",
+		Args:        []string{"task_name"},
+		Description: "Stop a running task",
+	},
+	{
+		Name:        "restart",
+		Args:        []string{"task_name"},
+		Description: "Restart a task",
+	},
+	{
+		Name:        "reload",
+		Description: "Reload the config file",
+	},
+	{
+		Name:        "status",
+		Description: "Print information about the tasks that have been started",
+	},
+	{
+		Name:        "config",
+		Description: "Print the config file",
+	},
+	{
+		Name:        "exit",
+		Description: "Shutdown all tasks and quit the program",
+	},
+}
 
 func (s *Shell) Init(supervisor *Supervisor) {
 	s.closed = make(chan bool, 1)
@@ -21,14 +63,26 @@ func (s *Shell) Init(supervisor *Supervisor) {
 
 func (s *Shell) PrintHelp() {
 	fmt.Println("Commands:")
-	fmt.Println("  help")
-	fmt.Println("  start {task}")
-	fmt.Println("  stop {task}")
-	fmt.Println("  restart {task}")
-	fmt.Println("  reload")
-	fmt.Println("  status")
-	fmt.Println("  config")
-	fmt.Println("  exit")
+
+	const Align int = 20
+	for _, cmd := range shell_commands {
+		i := 0
+		ii := 0
+		ii, _ = fmt.Printf("  %v", cmd.Name)
+		i += ii
+
+		for _, arg := range cmd.Args {
+			ii, _ = fmt.Printf(" %v", arg)
+			i += ii
+		}
+
+		fmt.Printf(": ")
+		for range Align - i {
+			fmt.Printf(" ")
+		}
+
+		fmt.Printf("%v\n", cmd.Description)
+	}
 }
 
 func (s *Shell) Loop() {
@@ -41,9 +95,9 @@ func (s *Shell) Loop() {
 
 	line.SetCtrlCAborts(true)
 	line.SetCompleter(func(line string) (c []string) {
-		for _, n := range commands {
-			if strings.HasPrefix(n, strings.ToLower(line)) {
-				c = append(c, n)
+		for _, cmd := range shell_commands {
+			if strings.HasPrefix(cmd.Name, strings.ToLower(line)) {
+				c = append(c, cmd.Name)
 			}
 		}
 		return
