@@ -14,7 +14,7 @@ This shell must at least allow the user to:
 * [x] Stop the main program
 
 The configuration file must allow the user to specify the following, for each program that is to be supervised:
-* [?] The command to use to launch the program
+* [x] The command to use to launch the program
 * [x] The number of processes to start and keep running
 * [x] Whether to start this program at launch or not
 * [x] Whether the program should be restarted always, never, or on unexpected exits only

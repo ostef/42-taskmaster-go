@@ -134,6 +134,7 @@ const (
 )
 
 type TaskProcess struct {
+	taskName     string
 	status       ProcessStatus
 	cmd          *exec.Cmd
 	commandQueue chan ProcessCommand
@@ -283,6 +284,7 @@ func (s *Supervisor) StartTask(name string) error {
 	numNewProcessesToSpawn := config.NumProcesses - len(task.processes)
 	for range numNewProcessesToSpawn {
 		process := new(TaskProcess)
+		process.taskName = task.name
 		task.processes = append(task.processes, process)
 
 		process.setConfig(*config)
@@ -339,6 +341,7 @@ func (s *Supervisor) RestartTask(name string) error {
 	numNewProcessesToSpawn := config.NumProcesses - len(task.processes)
 	for range numNewProcessesToSpawn {
 		process := new(TaskProcess)
+		process.taskName = task.name
 		task.processes = append(task.processes, process)
 
 		process.setConfig(*config)
@@ -512,6 +515,7 @@ func (s *Supervisor) UpdateTaskConfig(name string) {
 			// Spawn new processes if necessary
 			for range numNewProcessesToSpawn {
 				process := new(TaskProcess)
+				process.taskName = task.name
 				task.processes = append(task.processes, process)
 
 				process.setConfig(*config)
@@ -620,7 +624,7 @@ func (s *Supervisor) Loop() {
 }
 
 func (p *TaskProcess) Stop(done chan error) error {
-	p.logger.Println("Shutting down process...")
+	p.logger.Printf("Task '%v': shutting down process...", p.taskName)
 
 	config := p.getConfig()
 
@@ -629,15 +633,15 @@ func (p *TaskProcess) Stop(done chan error) error {
 
 	select {
 	case err := <-done:
-		p.logger.Println("Process exited gracefully:", err)
+		p.logger.Printf("Task '%v': process exited gracefully: %v", p.taskName, err)
 		p.status.SetExited(ProcessStatusStopped, true, err, config.ExpectedExitCodes)
 		return err
 
 	case <-time.After(time.Duration(config.SecondsAfterStopRequestBeforeProgramKill) * time.Second):
-		p.logger.Println("Process still exiting, sending SIGKILL...")
+		p.logger.Printf("Task '%v': process still exiting, sending SIGKILL...", p.taskName)
 		_ = p.cmd.Process.Kill()
 		err := <-done
-		p.logger.Println("Process killed:", err)
+		p.logger.Printf("Task '%v': process killed: %v", p.taskName, err)
 		p.status.Set(ProcessStatusKilled, err)
 
 		return err
@@ -649,7 +653,7 @@ func (p *TaskProcess) Run(ctx context.Context) error {
 	for true {
 		config := p.getConfig()
 
-		p.logger.Printf("Starting process for '%s'", config.Name)
+		p.logger.Printf("Task '%v': starting process", p.taskName)
 		p.cmd = exec.CommandContext(context.Background(), config.Command, config.Args...)
 		p.cmd.Stdout = os.Stdout
 		p.cmd.Stderr = os.Stderr
@@ -666,7 +670,7 @@ func (p *TaskProcess) Run(ctx context.Context) error {
 
 		err := p.cmd.Start()
 		if err != nil {
-			p.logger.Println("Could not start process:", err)
+			p.logger.Printf("Task '%v': could not start process: %v", p.taskName, err)
 			p.status.Set(ProcessStatusError, err)
 
 			return err
@@ -687,7 +691,7 @@ func (p *TaskProcess) Run(ctx context.Context) error {
 		select {
 		case err := <-doneCh:
 			p.status.SetExited(ProcessStatusStopped, false, err, config.ExpectedExitCodes)
-			p.logger.Println("Process exited early:", err)
+			p.logger.Printf("Task '%v': process exited early: %v", p.taskName, err)
 
 		case request := <-p.commandQueue:
 			switch request {
@@ -704,7 +708,7 @@ func (p *TaskProcess) Run(ctx context.Context) error {
 
 		case <-time.After(time.Duration(config.StartupTimeInSeconds) * time.Second):
 			p.status.Set(ProcessStatusRunning, nil)
-			p.logger.Println("Process has sucessfully started")
+			p.logger.Printf("Task '%v': process has sucessfully started", p.taskName)
 		}
 
 		status, _ := p.status.Get()
@@ -714,7 +718,7 @@ func (p *TaskProcess) Run(ctx context.Context) error {
 			select {
 			case err := <-doneCh:
 				p.status.SetExited(ProcessStatusStopped, false, err, config.ExpectedExitCodes)
-				p.logger.Println("Process exited:", err)
+				p.logger.Printf("Task '%v': process exited: %v", p.taskName, err)
 
 			case request := <-p.commandQueue:
 				switch request {
@@ -738,7 +742,7 @@ func (p *TaskProcess) Run(ctx context.Context) error {
 
 		if stoppedByUser && (config.AutoRestart == AutoRestartAlways || (config.AutoRestart == AutoRestartUnexpected && !allStatus.expectedExit)) && numAutoRestarts < config.MaxAutoRestarts {
 			numAutoRestarts += 1
-			p.logger.Printf("Auto-restarting '%s' (attempt %d/%d)", config.Name, numAutoRestarts, config.MaxAutoRestarts)
+			p.logger.Printf("Task '%v': auto-restarting (attempt %d/%d)", p.taskName, numAutoRestarts, config.MaxAutoRestarts)
 			continue
 		}
 
