@@ -134,25 +134,12 @@ func signalToString(sig syscall.Signal) string {
 	return str
 }
 
-func checkExitCode(code int) error {
-	if code < 0 || code > 255 {
-		return fmt.Errorf("exit code out of range [0-255]: %d", code)
-	}
-
-	return nil
-}
-
 func parseExitCodes(exitCodes any) ([]int, error) {
 	switch value := exitCodes.(type) {
 	case nil:
 		return []int{0}, nil
 
 	case int:
-		err := checkExitCode(value)
-		if err != nil {
-			return nil, err
-		}
-
 		return []int{value}, nil
 
 	case []any:
@@ -161,11 +148,6 @@ func parseExitCodes(exitCodes any) ([]int, error) {
 			number, ok := code.(int)
 			if !ok {
 				return nil, fmt.Errorf("invalid exit code: %v", code)
-			}
-
-			err := checkExitCode(number)
-			if err != nil {
-				return nil, err
 			}
 
 			codes = append(codes, number)
