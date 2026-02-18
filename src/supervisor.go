@@ -263,14 +263,14 @@ func (s *Supervisor) StartTask(name string) error {
 		task.name = name
 	}
 
-	task.shouldRun = true
-
 	for _, process := range task.processes {
 		status, _ := process.status.Get()
 		if status == ProcessStatusStarted || status == ProcessStatusRunning || status == ProcessStatusStopping {
 			return s.loggerErrorf("Task '%v' still has some running processes", name)
 		}
 	}
+
+	task.shouldRun = true
 
 	for _, process := range task.processes {
 		status, _ := process.status.Get()
@@ -480,7 +480,7 @@ func (s *Supervisor) PrintStatus() {
 			fmt.Printf("\n")
 		}
 
-		fmt.Printf("Task '%v', ", task.name)
+		fmt.Printf("Task '%v', requested start: %v, ", task.name, task.shouldRun)
 
 		if len(task.processes) > 0 {
 			fmt.Printf("%d process(es):\n", len(task.processes))
