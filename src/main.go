@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"os"
+	"time"
 )
 
 func main() {
@@ -17,10 +18,17 @@ func main() {
 		return
 	}
 
+	current_time := time.Now().Local()
+	filename := current_time.Format("log_2006-01-02_15-04-05.txt")
+	f, err := os.Create(filename)
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
 	var supervisor Supervisor
 	defer supervisor.DestroyAllTasks()
 
-	supervisor.Init(config)
+	supervisor.Init(config, f)
 
 	var shell Shell
 	shell.Init(&supervisor)
