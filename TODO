@@ -2,13 +2,11 @@
 * Review config parsing validation
 * Handle umask
 * Handle stdout and stderr
-* Logging
 * Allow processes to be removed from the Task.processes array only when they have fully exited their loop (otherwise in certain circumstances like reloading like reloading the config we can't see their status if they don't shutdown gracefully for example)
 * Make the status command also print the config file
-* Make the supervisor and the shell run concurrently (the supervisor waits for commands, the shell sends commands. This would allow for correct SIGHUP handling)
 
 ## Subject checklist
-* [ ] The configuration must be loaded at launch, and must be reloadable, while taskmaster is running, by sending a SIGHUP to it
+* [x] The configuration must be loaded at launch, and must be reloadable, while taskmaster is running, by sending a SIGHUP to it
 * [ ] Your program must have a logging system that logs events to a local file (When a program is started, stopped, restarted, when it dies unexpectedly, when the configuration is reloaded, etc ...)
 * [x] The shell must be at the very least usable (Line editing, history... completion would also be nice)
 
