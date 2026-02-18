@@ -36,7 +36,7 @@ var shell_commands = []ShellCommand{
 	{
 		Name:        "restart",
 		Args:        []string{"task_name"},
-		Description: "Restart a task",
+		Description: "Stop then restart a task",
 	},
 	{
 		Name:        "reload",
