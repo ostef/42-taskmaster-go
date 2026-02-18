@@ -80,7 +80,7 @@ func parseAutoRestart(str string) (AutoRestartPolicy, error) {
 	case "unexpected":
 		return AutoRestartUnexpected, nil
 	default:
-		return "", fmt.Errorf("unknown autorestart policy: %s", str)
+		return "", fmt.Errorf("unknown autorestart policy: %v", str)
 	}
 }
 
@@ -103,7 +103,7 @@ func parseSignal(str string) (syscall.Signal, error) {
 
 	sig, ok := signals[str]
 	if !ok {
-		return 0, fmt.Errorf("unknown signal: %s", str)
+		return 0, fmt.Errorf("unknown signal: %v", str)
 	}
 
 	return sig, nil
@@ -162,19 +162,19 @@ func parseExitCodes(exitCodes any) ([]int, error) {
 
 func validateTask(task TaskConfig, taskName string) error {
 	if task.NumProcesses < 1 {
-		return fmt.Errorf("task %s: numprocs must be >= 1, got %d", taskName, task.NumProcesses)
+		return fmt.Errorf("task %v: numprocs must be >= 1, got %v", taskName, task.NumProcesses)
 	}
 	if task.SecondsToWaitBeforeAutoStart < 0 {
-		return fmt.Errorf("task %s: starttime must be >= 0, got %v", taskName, task.SecondsToWaitBeforeAutoStart)
+		return fmt.Errorf("task %v: starttime must be >= 0, got %v", taskName, task.SecondsToWaitBeforeAutoStart)
 	}
 	if task.MaxAutoRestarts < 0 {
-		return fmt.Errorf("task %s: autorestarttries must be >= 0, got %d", taskName, task.MaxAutoRestarts)
+		return fmt.Errorf("task %v: autorestarttries must be >= 0, got %v", taskName, task.MaxAutoRestarts)
 	}
 	if task.SecondsAfterStopRequestBeforeProcessKill < 0 {
-		return fmt.Errorf("task %s: stoptime must be >= 0, got %v", taskName, task.SecondsAfterStopRequestBeforeProcessKill)
+		return fmt.Errorf("task %v: stoptime must be >= 0, got %v", taskName, task.SecondsAfterStopRequestBeforeProcessKill)
 	}
 	if task.Umask > 0777 {
-		return fmt.Errorf("task %s: umask must be <= 0777, got %o", taskName, task.Umask)
+		return fmt.Errorf("task %v: umask must be <= 0777, got 0%o", taskName, task.Umask)
 	}
 
 	return nil
@@ -183,11 +183,11 @@ func validateTask(task TaskConfig, taskName string) error {
 func ParseConfig(file_path string) (Config, error) {
 	data, err := os.ReadFile(file_path)
 	if err != nil {
-		return Config{}, fmt.Errorf("cannot read file %s: %w", file_path, err)
+		return Config{}, fmt.Errorf("cannot read file %v: %w", file_path, err)
 	}
 	var raw RawConfig
 	if err := yaml.Unmarshal(data, &raw); err != nil {
-		return Config{}, fmt.Errorf("invalid YAML from %s: %w", file_path, err)
+		return Config{}, fmt.Errorf("invalid YAML from %v: %w", file_path, err)
 	}
 
 	defaultUmask := syscall.Umask(0)
@@ -197,25 +197,25 @@ func ParseConfig(file_path string) (Config, error) {
 
 	for name, tasks := range raw.Tasks {
 		if tasks.Cmd == "" {
-			return Config{}, fmt.Errorf("task %s: cmd is required", name)
+			return Config{}, fmt.Errorf("task %v: cmd is required", name)
 		}
 
 		autoRestart, err := parseAutoRestart(tasks.AutoRestart)
 		if err != nil {
-			return Config{}, fmt.Errorf("task %s, autorestart error:  %w", name, err)
+			return Config{}, fmt.Errorf("task %v, autorestart error:  %w", name, err)
 		}
 
 		stopSignal := syscall.SIGTERM
 		if tasks.StopSignal != "" {
 			stopSignal, err = parseSignal(tasks.StopSignal)
 			if err != nil {
-				return Config{}, fmt.Errorf("task %s, stopsignal error: %w", name, err)
+				return Config{}, fmt.Errorf("task %v, stopsignal error: %w", name, err)
 			}
 		}
 
 		exitCodes, err := parseExitCodes(tasks.ExitCodes)
 		if err != nil {
-			return Config{}, fmt.Errorf("task %s, exit code error: %w", name, err)
+			return Config{}, fmt.Errorf("task %v, exit code error: %w", name, err)
 		}
 
 		task := TaskConfig{
