@@ -5,9 +5,9 @@ RM = rm
 TESTS_SOURCES=$(wildcard tests/*.c)
 TESTS=$(TESTS_SOURCES:.c=)
 
-all : build
+all: all_tests build
 
-build :
+build:
 	$(GO) build -o $(NAME) $(SRC)
 
 tests/%: tests/%.c
@@ -15,13 +15,13 @@ tests/%: tests/%.c
 
 all_tests: $(TESTS)
 
-clean :
-	$(RM) $(NAME)
-
-fclean : clean
+clean:
 	$(GO) clean -cache
+
+fclean: clean
+	$(RM) $(NAME)
 	$(RM) $(TESTS)
 
-re : fclean all
+re: fclean all
 
-.PHONY : clean fclean re all build all_tests
+.PHONY: clean fclean re all build all_tests
