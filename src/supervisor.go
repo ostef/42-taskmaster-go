@@ -748,6 +748,7 @@ func (p *TaskProcess) Run(ctx context.Context) error {
 
 		numAutoRestarts = 0
 
+		// Wait for a restart or destroy command from the supervisor
 		for !shouldRestart {
 			request := <-p.commandQueue
 			switch request {
