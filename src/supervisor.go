@@ -435,11 +435,11 @@ func (s *Supervisor) PrintConfig() {
 		}
 
 		if taskCfg.Stdout != "" {
-			fmt.Printf("  stdout: %v\n", taskCfg.Stdout)
+			fmt.Printf("  stdout: '%v'\n", taskCfg.Stdout)
 		}
 
 		if taskCfg.Stderr != "" {
-			fmt.Printf("  stderr: %v\n", taskCfg.Stderr)
+			fmt.Printf("  stderr: '%v'\n", taskCfg.Stderr)
 		}
 
 		if taskCfg.AutoStart && taskCfg.SecondsToWaitBeforeAutoStart > 0 {
