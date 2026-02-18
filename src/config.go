@@ -17,22 +17,22 @@ const (
 )
 
 type RawTask struct {
-	Cmd           string            `yaml:"cmd"`
-	Args          []string          `yaml:"args"`
-	NumProcs      *int              `yaml:"numprocs"`
-	Umask         *uint32           `yaml:"umask"`
-	WorkingDir    string            `yaml:"workingdir"`
-	AutoStart     *bool             `yaml:"autostart"`
-	AutoRestart   string            `yaml:"autorestart"`
-	ExitCodes     any               `yaml:"exitcodes"`
-	StartRetries  *int              `yaml:"startretries"`
-	AutoStartTime *float64          `yaml:"autostarttime"`
-	StartTime     *float64          `yaml:"starttime"`
-	StopSignal    string            `yaml:"stopsignal"`
-	StopTime      *float64          `yaml:"stoptime"`
-	Stdout        string            `yaml:"stdout"`
-	Stderr        string            `yaml:"stderr"`
-	Env           map[string]string `yaml:"env"`
+	Cmd              string            `yaml:"cmd"`
+	Args             []string          `yaml:"args"`
+	NumProcs         *int              `yaml:"numprocs"`
+	Umask            *uint32           `yaml:"umask"`
+	WorkingDir       string            `yaml:"workingdir"`
+	AutoStart        *bool             `yaml:"autostart"`
+	AutoRestart      string            `yaml:"autorestart"`
+	ExitCodes        any               `yaml:"exitcodes"`
+	AutoRestartTries *int              `yaml:"autorestarttries"`
+	AutoStartTime    *float64          `yaml:"autostarttime"`
+	StartTime        *float64          `yaml:"starttime"`
+	StopSignal       string            `yaml:"stopsignal"`
+	StopTime         *float64          `yaml:"stoptime"`
+	Stdout           string            `yaml:"stdout"`
+	Stderr           string            `yaml:"stderr"`
+	Env              map[string]string `yaml:"env"`
 }
 
 type RawConfig struct {
@@ -107,6 +107,31 @@ func parseSignal(str string) (syscall.Signal, error) {
 	return sig, nil
 }
 
+func signalToString(sig syscall.Signal) string {
+	signals := map[syscall.Signal]string{
+		syscall.SIGHUP:  "HUP",
+		syscall.SIGINT:  "INT",
+		syscall.SIGILL:  "ILL",
+		syscall.SIGQUIT: "QUIT",
+		syscall.SIGKILL: "KILL",
+		syscall.SIGUSR1: "USR1",
+		syscall.SIGUSR2: "USR2",
+		syscall.SIGTERM: "TERM",
+		syscall.SIGSTOP: "STOP",
+		syscall.SIGSYS:  "SYS",
+		syscall.SIGSEGV: "SEGV",
+		syscall.SIGABRT: "ABRT",
+		syscall.SIGFPE:  "FPE",
+	}
+
+	str, ok := signals[sig]
+	if !ok {
+		return "???"
+	}
+
+	return str
+}
+
 func checkExitCode(code int) error {
 	if code < 0 || code > 255 {
 		return fmt.Errorf("exit code out of range [0-255]: %d", code)
@@ -151,7 +176,7 @@ func validateTask(task TaskConfig, programName string) error {
 		return fmt.Errorf("program %s: starttime must be >= 0, got %v", programName, task.SecondsToWaitBeforeAutoStart)
 	}
 	if task.MaxAutoRestarts < 0 {
-		return fmt.Errorf("program %s: startretries must be >= 0, got %d", programName, task.MaxAutoRestarts)
+		return fmt.Errorf("program %s: autorestarttries must be >= 0, got %d", programName, task.MaxAutoRestarts)
 	}
 	if task.SecondsAfterStopRequestBeforeProgramKill < 0 {
 		return fmt.Errorf("program %s: stoptime must be >= 0, got %v", programName, task.SecondsAfterStopRequestBeforeProgramKill)
@@ -172,6 +197,9 @@ func ParseConfig(file_path string) (Config, error) {
 	if err := yaml.Unmarshal(data, &raw); err != nil {
 		return Config{}, fmt.Errorf("invalid YAML from %s: %w", file_path, err)
 	}
+
+	defaultUmask := syscall.Umask(0)
+	syscall.Umask(defaultUmask)
 
 	config := Config{filename: file_path}
 
@@ -211,10 +239,10 @@ func ParseConfig(file_path string) (Config, error) {
 			SecondsToWaitBeforeAutoStart:             setDefaultValueIfNull(tasks.AutoStartTime, 0),
 			StartupTimeInSeconds:                     setDefaultValueIfNull(tasks.StartTime, 1),
 			AutoRestart:                              autoRestart,
-			MaxAutoRestarts:                          setDefaultValueIfNull(tasks.StartRetries, 5),
+			MaxAutoRestarts:                          setDefaultValueIfNull(tasks.AutoRestartTries, 5),
 			ExpectedExitCodes:                        exitCodes,
 			StopSignal:                               stopSignal,
-			Umask:                                    setDefaultValueIfNull(tasks.Umask, uint32(0)),
+			Umask:                                    setDefaultValueIfNull(tasks.Umask, uint32(defaultUmask)),
 			SecondsAfterStopRequestBeforeProgramKill: setDefaultValueIfNull(tasks.StopTime, 5),
 		}
 

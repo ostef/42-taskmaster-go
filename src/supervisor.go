@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"os/signal"
 	"slices"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -181,6 +182,7 @@ const (
 	SupervisorStopTask     = iota
 	SupervisorRestartTask  = iota
 	SupervisorExit         = iota
+	SupervisorPrintConfig  = iota
 	SupervisorPrintStatus  = iota
 	SupervisorReloadConfig = iota
 )
@@ -391,22 +393,91 @@ func (s *Supervisor) DestroyAllTasks() error {
 	return nil
 }
 
+func (s *Supervisor) PrintConfig() {
+	if len(s.config.tasks) == 0 {
+		fmt.Println("No task in config file")
+		return
+	}
+
+	for i, taskCfg := range s.config.tasks {
+		if i > 0 {
+			fmt.Printf("\n")
+		}
+
+		fmt.Printf("Task '%v':\n", taskCfg.Name)
+
+		fmt.Printf("  cmd: '%v", taskCfg.Command)
+		for _, arg := range taskCfg.Args {
+			if strings.Contains(arg, " ") {
+				fmt.Printf(" \"%v\"", arg)
+			} else {
+				fmt.Printf(" %v", arg)
+			}
+		}
+		fmt.Printf("'\n")
+
+		fmt.Printf("  env:\n")
+		for key, val := range taskCfg.Env {
+			fmt.Printf("    %v=%v\n", key, val)
+		}
+
+		fmt.Printf("  numprocs: %v\n", taskCfg.NumProcesses)
+
+		if taskCfg.WorkingDir != "" {
+			fmt.Printf("  workingdir: %v\n", taskCfg.WorkingDir)
+		}
+
+		if taskCfg.Stdout != "" {
+			fmt.Printf("  stdout: %v\n", taskCfg.Stdout)
+		}
+
+		if taskCfg.Stderr != "" {
+			fmt.Printf("  stderr: %v\n", taskCfg.Stderr)
+		}
+
+		if taskCfg.AutoStart && taskCfg.SecondsToWaitBeforeAutoStart > 0 {
+			fmt.Printf("  autostart: after %v second(s)\n", taskCfg.SecondsToWaitBeforeAutoStart)
+		} else {
+			fmt.Printf("  autostart: %v\n", taskCfg.AutoStart)
+		}
+
+		if taskCfg.StartupTimeInSeconds > 0 {
+			fmt.Printf("  starttime: %v second(s)\n", taskCfg.StartupTimeInSeconds)
+		}
+
+		fmt.Printf("  autorestart: %v\n", taskCfg.AutoRestart)
+		if taskCfg.AutoRestart != AutoRestartNever {
+			fmt.Printf("  autorestarttries: %v\n", taskCfg.MaxAutoRestarts)
+		}
+
+		fmt.Printf("  exitcodes: %v\n", taskCfg.ExpectedExitCodes)
+
+		fmt.Printf("  stopsignal: %v\n", signalToString(taskCfg.StopSignal))
+
+		if taskCfg.SecondsAfterStopRequestBeforeProgramKill > 0 {
+			fmt.Printf("  stoptime: %v second(s)\n", taskCfg.SecondsAfterStopRequestBeforeProgramKill)
+		}
+
+		fmt.Printf("  umask: 0%03o\n", taskCfg.Umask)
+	}
+}
+
 func (s *Supervisor) PrintStatus() {
 	if len(s.tasks) == 0 {
-		fmt.Println("No tasks")
+		fmt.Println("No running task")
 		return
 	}
 
 	for _, task := range s.tasks {
-		fmt.Printf("Task '%v':\n", task.name)
+		fmt.Printf("Task '%v', ", task.name)
 
-		if len(task.processes) == 0 {
-			fmt.Println("No process")
-		} else {
-			fmt.Printf("Processes (%d):\n", len(task.processes))
+		if len(task.processes) > 0 {
+			fmt.Printf("%d process(es):\n", len(task.processes))
 			for i, process := range task.processes {
 				fmt.Printf("  %d: %v\n", i, process.status.String())
 			}
+		} else {
+			fmt.Println("no process")
 		}
 	}
 }
@@ -521,6 +592,11 @@ func (s *Supervisor) Loop() {
 				s.isRunning = false
 				if cmd.ErrChan != nil {
 					cmd.ErrChan <- err
+				}
+			case SupervisorPrintConfig:
+				s.PrintConfig()
+				if cmd.ErrChan != nil {
+					cmd.ErrChan <- nil
 				}
 			case SupervisorPrintStatus:
 				s.PrintStatus()

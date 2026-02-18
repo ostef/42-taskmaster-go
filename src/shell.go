@@ -12,7 +12,7 @@ type Shell struct {
 	closed     chan bool
 }
 
-var commands = []string{"start", "stop", "restart", "reload", "status", "exit", "help"}
+var commands = []string{"start", "stop", "restart", "reload", "status", "config", "exit", "help"}
 
 func (s *Shell) Init(supervisor *Supervisor) {
 	s.closed = make(chan bool, 1)
@@ -27,6 +27,7 @@ func (s *Shell) PrintHelp() {
 	fmt.Println("  restart {task}")
 	fmt.Println("  reload")
 	fmt.Println("  status")
+	fmt.Println("  config")
 	fmt.Println("  exit")
 }
 
@@ -129,6 +130,15 @@ func (s *Shell) Loop() {
 			}
 
 			s.supervisor.commandQueue <- SupervisorCommand{Kind: SupervisorPrintStatus, ErrChan: errChan}
+			<-errChan
+
+		case "config":
+			if len(args) != 0 {
+				fmt.Println("Error: Expected 0 argument for 'config' command")
+				continue
+			}
+
+			s.supervisor.commandQueue <- SupervisorCommand{Kind: SupervisorPrintConfig, ErrChan: errChan}
 			<-errChan
 
 		case "exit":
