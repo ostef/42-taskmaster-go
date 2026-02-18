@@ -60,3 +60,5 @@ programs:
   stdin:
     cmd: "./tests/stdin"
     numprocs: 1
+  bad:
+    cmd: "./not/a/valid/command"
