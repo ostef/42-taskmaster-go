@@ -1,3 +1,21 @@
+# Add tests for these:
+# [ ] cmd
+# [ ] args
+# [ ] numprocs
+# [ ] umask
+# [ ] workingdir
+# [ ] autostart
+# [ ] autorestart
+# [ ] exitcodes
+# [ ] startretries
+# [ ] autostarttime
+# [ ] starttime
+# [ ] stopsignal
+# [ ] stoptime
+# [ ] stdout
+# [ ] stderr
+# [ ] env
+
 programs:
   non_zero_exit_code:
     cmd: "./tests/non_zero_exit_code"
@@ -10,13 +28,15 @@ programs:
       OCCUPATION: unemployed
       VARIABLE: $PATH
       NEWLINES: "some\nnewlines"
+    autorestart: always
   working_dir:
     cmd: "../tests/working_dir"
     workingdir: "./config"
   infinite:
     cmd: "./tests/infinite"
-    numprocs: 5
+    numprocs: 4
   long_shutdown:
     cmd: "./tests/long_shutdown"
     stopsignal: USR1
-    stoptime: 1
+    stoptime: 20
+    numprocs: 3

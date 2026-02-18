@@ -24,7 +24,7 @@ The configuration file must allow the user to specify the following, for each pr
 * [ ] Whether to start this program at launch or not
 * [x] Whether the program should be restarted always, never, or on unexpected exits only
 * [x] Which return codes represent an "expected" exit status
-* [ ] How long the program should be running after it’s started for it to be considered "successfully started"
+* [x] How long the program should be running after it’s started for it to be considered "successfully started"
 * [x] How many times a restart should be attempted before aborting
 * [x] Which signal should be used to stop (i.e. exit gracefully) the program
 * [x] How long to wait after a graceful stop before killing the program

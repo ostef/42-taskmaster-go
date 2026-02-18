@@ -18,11 +18,16 @@ func main() {
 	}
 
 	var supervisor Supervisor
-	supervisor.Init(config)
 	defer supervisor.DestroyAllTasks()
 
-	var shell Shell
-	shell.supervisor = &supervisor
+	supervisor.Init(config)
 
-	shell.Loop()
+	var shell Shell
+	shell.Init(&supervisor)
+
+	go shell.Loop()
+
+	supervisor.Loop()
+
+	<-shell.closed
 }

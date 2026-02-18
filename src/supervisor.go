@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"os/signal"
 	"slices"
 	"sync"
 	"syscall"
@@ -163,13 +164,37 @@ type Task struct {
 }
 
 type Supervisor struct {
-	waitGroup sync.WaitGroup
-	tasks     []*Task
-	config    Config
+	waitGroup    sync.WaitGroup
+	tasks        []*Task
+	config       Config
+	isRunning    bool
+	commandQueue chan SupervisorCommand
+	sigChan      chan os.Signal
+}
+
+const (
+	SupervisorStartTask    = iota
+	SupervisorStopTask     = iota
+	SupervisorRestartTask  = iota
+	SupervisorExit         = iota
+	SupervisorPrintStatus  = iota
+	SupervisorReloadConfig = iota
+)
+
+type SupervisorCommand struct {
+	Kind     uint
+	TaskName string
+	ErrChan  chan error
 }
 
 func (s *Supervisor) Init(config Config) {
+	s.commandQueue = make(chan SupervisorCommand, 1)
+	s.sigChan = make(chan os.Signal, 1)
+
 	s.config = config
+	signal.Notify(s.sigChan, syscall.SIGHUP)
+
+	s.isRunning = true
 }
 
 func (s *Supervisor) getTaskConfig(name string) *TaskConfig {
@@ -430,6 +455,52 @@ func (s *Supervisor) ReloadConfig() error {
 	}
 
 	return nil
+}
+
+func (s *Supervisor) Loop() {
+	for s.isRunning {
+		select {
+		case cmd := <-s.commandQueue:
+			switch cmd.Kind {
+			case SupervisorStartTask:
+				err := s.StartTask(cmd.TaskName)
+				if cmd.ErrChan != nil {
+					cmd.ErrChan <- err
+				}
+			case SupervisorStopTask:
+				err := s.StopTask(cmd.TaskName)
+				if cmd.ErrChan != nil {
+					cmd.ErrChan <- err
+				}
+			case SupervisorRestartTask:
+				err := s.RestartTask(cmd.TaskName)
+				if cmd.ErrChan != nil {
+					cmd.ErrChan <- err
+				}
+			case SupervisorExit:
+				err := s.DestroyAllTasks()
+				s.isRunning = false
+				if cmd.ErrChan != nil {
+					cmd.ErrChan <- err
+				}
+			case SupervisorPrintStatus:
+				s.PrintStatus()
+				if cmd.ErrChan != nil {
+					cmd.ErrChan <- nil
+				}
+			case SupervisorReloadConfig:
+				err := s.ReloadConfig()
+				if cmd.ErrChan != nil {
+					cmd.ErrChan <- err
+				}
+			}
+
+		case sig := <-s.sigChan:
+			if sig == syscall.SIGHUP {
+				_ = s.ReloadConfig()
+			}
+		}
+	}
 }
 
 func (p *TaskProcess) Stop(done chan error) error {

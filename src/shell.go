@@ -9,9 +9,15 @@ import (
 
 type Shell struct {
 	supervisor *Supervisor
+	closed     chan bool
 }
 
 var commands = []string{"start", "stop", "restart", "reload", "status", "exit", "help"}
+
+func (s *Shell) Init(supervisor *Supervisor) {
+	s.closed = make(chan bool, 1)
+	s.supervisor = supervisor
+}
 
 func (s *Shell) PrintHelp() {
 	fmt.Println("Commands:")
@@ -25,6 +31,10 @@ func (s *Shell) PrintHelp() {
 }
 
 func (s *Shell) Loop() {
+	defer func() {
+		s.closed <- true
+	}()
+
 	line := liner.NewLiner()
 	defer line.Close()
 
@@ -38,10 +48,13 @@ func (s *Shell) Loop() {
 		return
 	})
 
+	errChan := make(chan error, 1)
 	for {
 		input, err := line.Prompt("$> ")
 		if err != nil {
-			s.supervisor.DestroyAllTasks()
+			s.supervisor.commandQueue <- SupervisorCommand{Kind: SupervisorExit, ErrChan: errChan}
+			<-errChan
+
 			return
 		}
 
@@ -63,8 +76,8 @@ func (s *Shell) Loop() {
 				continue
 			}
 
-			name := args[0]
-			err := s.supervisor.StartTask(name)
+			s.supervisor.commandQueue <- SupervisorCommand{Kind: SupervisorStartTask, TaskName: args[0], ErrChan: errChan}
+			err := <-errChan
 
 			if err != nil {
 				fmt.Println("Error:", err)
@@ -76,8 +89,8 @@ func (s *Shell) Loop() {
 				continue
 			}
 
-			name := args[0]
-			err := s.supervisor.StopTask(name)
+			s.supervisor.commandQueue <- SupervisorCommand{Kind: SupervisorStopTask, TaskName: args[0], ErrChan: errChan}
+			err := <-errChan
 
 			if err != nil {
 				fmt.Println("Error:", err)
@@ -89,8 +102,8 @@ func (s *Shell) Loop() {
 				continue
 			}
 
-			name := args[0]
-			err := s.supervisor.RestartTask(name)
+			s.supervisor.commandQueue <- SupervisorCommand{Kind: SupervisorRestartTask, TaskName: args[0], ErrChan: errChan}
+			err := <-errChan
 
 			if err != nil {
 				fmt.Println("Error:", err)
@@ -102,7 +115,12 @@ func (s *Shell) Loop() {
 				continue
 			}
 
-			s.supervisor.ReloadConfig()
+			s.supervisor.commandQueue <- SupervisorCommand{Kind: SupervisorReloadConfig, ErrChan: errChan}
+			err := <-errChan
+
+			if err != nil {
+				fmt.Println("Error:", err)
+			}
 
 		case "status":
 			if len(args) != 0 {
@@ -110,14 +128,20 @@ func (s *Shell) Loop() {
 				continue
 			}
 
-			s.supervisor.PrintStatus()
+			s.supervisor.commandQueue <- SupervisorCommand{Kind: SupervisorPrintStatus, ErrChan: errChan}
+			<-errChan
 
 		case "exit":
 			if len(args) != 0 {
 				fmt.Println("Error: Expected 0 argument for 'exit' command. Exiting anyways")
 			}
 
-			s.supervisor.DestroyAllTasks()
+			s.supervisor.commandQueue <- SupervisorCommand{Kind: SupervisorExit, ErrChan: errChan}
+			err := <-errChan
+
+			if err != nil {
+				fmt.Println("Error:", err)
+			}
 
 			return
 
