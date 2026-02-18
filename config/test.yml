@@ -40,3 +40,10 @@ programs:
     stopsignal: USR1
     stoptime: 20
     numprocs: 3
+  umask_test:
+    cmd: "./tests/umask_test"
+    umask: 0777
+
+  umask_test2:
+    cmd: "./tests/umask_test"
+    umask: 0444

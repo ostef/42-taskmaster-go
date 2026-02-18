@@ -236,7 +236,9 @@ func (s *Supervisor) StartTask(name string) error {
 	if config == nil {
 		return s.loggerErrorf("No task named '%v'", name)
 	}
+
 	s.logger.Printf("Starting task '%s'", name)
+
 	task := s.getTask(name)
 	if task == nil {
 		task = new(Task)

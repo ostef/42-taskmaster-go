@@ -1,2 +1,5 @@
 taskmaster
-log*.txt
+logs
+test-umask.txt
+tests/*
+!tests/*.c
