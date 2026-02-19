@@ -1,5 +1,4 @@
 * Review config parsing validation
-* Handle stdout and stderr
 * Allow processes to be removed from the Task.processes array only when they have fully exited their loop (otherwise in certain circumstances like reloading like reloading the config we can't see their status if they don't shutdown gracefully for example)
 
 ## Subject checklist
@@ -23,7 +22,7 @@ The configuration file must allow the user to specify the following, for each pr
 * [x] How many times a restart should be attempted before aborting
 * [x] Which signal should be used to stop (i.e. exit gracefully) the program
 * [x] How long to wait after a graceful stop before killing the program
-* [ ] Options to discard the program’s stdout/stderr or to redirect them to files
+* [x] Options to discard the program’s stdout/stderr or to redirect them to files
 * [x] Environment variables to set before launching the program
 * [x] A working directory to set before launching the program
 * [x] An umask to set before launching the program
