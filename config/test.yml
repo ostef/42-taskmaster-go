@@ -36,6 +36,14 @@ tasks:
     args: ["should be printed 3 times"]
     autorestart: always
     autorestarttries: 2
+  infinite_autorestart:
+    cmd: "./tests/infinite"
+    autorestart: always
+    autorestarttries: 3
+  unexpected_infinite_autorestart:
+    cmd: "./tests/infinite"
+    autorestart: unexpected
+    autorestarttries: 3
   working_dir:
     cmd: "../tests/working_dir"
     workingdir: "./config"
