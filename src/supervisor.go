@@ -553,7 +553,6 @@ func (s *Supervisor) ReloadConfig() error {
 	s.logger.Printf("Reloading config from '%s'", s.config.filename)
 	cfg, err := ParseConfig(s.config.filename)
 	if err != nil {
-		fmt.Println(err)
 		return err
 	}
 
