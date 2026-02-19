@@ -20,12 +20,20 @@ type ProcessStatusNoMutex struct {
 	byUser       bool
 	expectedExit bool
 	exitCode     int
+	pid          int
 	err          error
 }
 
 type ProcessStatus struct {
 	ProcessStatusNoMutex
 	mutex sync.RWMutex
+}
+
+func (s *ProcessStatus) SetPid(pid int) {
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
+
+	s.pid = pid
 }
 
 func (s *ProcessStatus) SetExited(status uint, byUser bool, err error, expectedExitCodes []int) {
@@ -85,11 +93,11 @@ func (s *ProcessStatus) String() string {
 	case ProcessStatusNotStarted:
 		return "not started"
 	case ProcessStatusStarted:
-		return "started"
+		return fmt.Sprintf("started (pid %v)", status.pid)
 	case ProcessStatusRunning:
-		return "running"
+		return fmt.Sprintf("running (pid %v)", status.pid)
 	case ProcessStatusStopping:
-		return "stopping"
+		return fmt.Sprintf("stopping (pid %v)", status.pid)
 	case ProcessStatusStopped:
 		if status.expectedExit {
 			if status.byUser {
@@ -716,6 +724,8 @@ func (p *TaskProcess) Run(ctx context.Context) error {
 
 				return err
 			}
+
+			p.status.SetPid(p.cmd.Process.Pid)
 
 			return nil
 		}()
