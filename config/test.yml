@@ -86,5 +86,14 @@ tasks:
     cmd: "./tests/print_stderr"
     stdout: logs/print_stderr.stdout
     stderr: logs/print_stderr.stderr
+  multi_print_stderr:
+    cmd: "./tests/print_stderr"
+    stdout: logs/multi_print_stderr.stdout
+    stderr: logs/multi_print_stderr.stderr
+    numprocs: 10
+  bad_stdout:
+    cmd: "./tests/print_env"
+    stdout: bad/print_stderr.stdout
+    stderr: bad/print_stderr.stderr
   bad:
     cmd: "./not/a/valid/command"
