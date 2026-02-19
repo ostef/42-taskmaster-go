@@ -665,8 +665,6 @@ func (p *TaskProcess) Run(ctx context.Context) error {
 
 		p.logger.Printf("Task '%v': starting process", p.taskName)
 		p.cmd = exec.CommandContext(context.Background(), config.Command, config.Args...)
-		p.cmd.Stdout = os.Stdout
-		p.cmd.Stderr = os.Stderr
 
 		if config.WorkingDir != "" {
 			p.cmd.Dir = config.WorkingDir

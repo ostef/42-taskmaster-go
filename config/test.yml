@@ -80,11 +80,11 @@ tasks:
       OCCUPATION: unemployed
       VARIABLE: $PATH
       NEWLINES: "some\nnewlines"
-    stdout: log.stdout
-    stderr: log.stderr
+    stdout: logs/print_env.stdout
+    stderr: logs/print_env.stderr
   print_stderr:
     cmd: "./tests/print_stderr"
-    stdout: log.stdout
-    stderr: log.stderr
+    stdout: logs/print_stderr.stdout
+    stderr: logs/print_stderr.stderr
   bad:
     cmd: "./not/a/valid/command"
