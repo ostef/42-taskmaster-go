@@ -661,6 +661,7 @@ func (p *TaskProcess) Run(ctx context.Context) error {
 	numAutoRestarts := 0
 	for true {
 		config := p.getConfig()
+		var stdoutFile, stderrFile *os.File
 
 		p.logger.Printf("Task '%v': starting process", p.taskName)
 		p.cmd = exec.CommandContext(context.Background(), config.Command, config.Args...)
@@ -679,11 +680,32 @@ func (p *TaskProcess) Run(ctx context.Context) error {
 			p.supervisor.fileCreationMutex.Lock()
 			defer p.supervisor.fileCreationMutex.Unlock()
 
+			var err error
+			stdoutFile, err = openOutputFile(config.Stdout)
+			if err != nil {
+				p.logger.Printf("Task '%v': cannot open stdout '%v': %v", p.taskName, config.Stdout, err)
+				p.status.Set(ProcessStatusError, err)
+				return err
+			}
+
+			stderrFile, err = openOutputFile(config.Stderr)
+			if err != nil {
+				stdoutFile.Close()
+				p.logger.Printf("Task '%v': cannot open stderr '%v': %v", p.taskName, config.Stderr, err)
+				p.status.Set(ProcessStatusError, err)
+				return err
+			}
+
+			p.cmd.Stdout = stdoutFile
+			p.cmd.Stderr = stderrFile
+
 			oldmask := syscall.Umask(int(config.Umask))
 			defer syscall.Umask(oldmask)
 
-			err := p.cmd.Start()
+			err = p.cmd.Start()
 			if err != nil {
+				stdoutFile.Close()
+				stderrFile.Close()
 				p.logger.Printf("Task '%v': could not start process: %v", p.taskName, err)
 				p.status.Set(ProcessStatusError, err)
 
@@ -703,7 +725,10 @@ func (p *TaskProcess) Run(ctx context.Context) error {
 		shouldRestart := false
 
 		go func() {
-			doneCh <- p.cmd.Wait()
+			err := p.cmd.Wait()
+			stdoutFile.Close()
+			stderrFile.Close()
+			doneCh <- err
 		}()
 
 		// Process startup

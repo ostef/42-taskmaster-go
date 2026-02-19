@@ -12,8 +12,8 @@
 # [x] starttime
 # [x] stopsignal
 # [x] stoptime
-# [ ] stdout
-# [ ] stderr
+# [x] stdout
+# [x] stderr
 # [x] env
 
 tasks:
@@ -72,5 +72,19 @@ tasks:
   stdin:
     cmd: "./tests/stdin"
     numprocs: 1
+  print_env_stdout:
+    cmd: "./tests/print_env"
+    env:
+      NAME: "Hello"
+      VALUE: 1
+      OCCUPATION: unemployed
+      VARIABLE: $PATH
+      NEWLINES: "some\nnewlines"
+    stdout: log.stdout
+    stderr: log.stderr
+  print_stderr:
+    cmd: "./tests/print_stderr"
+    stdout: log.stdout
+    stderr: log.stderr
   bad:
     cmd: "./not/a/valid/command"
