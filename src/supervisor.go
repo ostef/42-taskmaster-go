@@ -656,6 +656,30 @@ func (p *TaskProcess) Stop(done chan error) error {
 	}
 }
 
+func openOutputFile(path string) (*os.File, error) {
+	if path == "" {
+		return os.OpenFile(os.DevNull, os.O_WRONLY, 0)
+	}
+
+	info, err := os.Stat(path)
+	if err == nil {
+		if info.IsDir() {
+			return nil, fmt.Errorf("'%v' is a directory", path)
+		}
+
+		if info.Mode().Perm()&0200 == 0 {
+			return nil, fmt.Errorf("'%v' is not writable", path)
+		}
+		return os.OpenFile(path, os.O_WRONLY|os.O_APPEND, 0)
+	}
+
+	if !errors.Is(err, os.ErrNotExist) {
+		return nil, fmt.Errorf("cannot stat '%v': %w", path, err)
+	}
+
+	return os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0644)
+}
+
 func (p *TaskProcess) Run(ctx context.Context) error {
 	numAutoRestarts := 0
 	for true {
